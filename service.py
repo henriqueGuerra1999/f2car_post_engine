@@ -115,12 +115,13 @@ def _generate(payload: VehiclePayload, out_path: str) -> dict:
 
 @app.post("/gerar-post")
 def gerar_post(payload: VehiclePayload):
-    out_path = os.path.join(tempfile.gettempdir(), f"post_{uuid.uuid4()}.png")
-    warnings = _generate(payload, out_path)
-
-    with open(out_path, "rb") as f:
-        png_bytes = f.read()
-    os.remove(out_path)
+    # Gera sempre em memoria (BytesIO), nunca em disco -- evita por completo
+    # a classe de erro "FileNotFoundError" observada no disco efemero da
+    # Render quando se grava e reabre o ficheiro na mesma request.
+    buf = io.BytesIO()
+    warnings = _generate(payload, buf)
+    buf.seek(0)
+    png_bytes = buf.read()
 
     headers = {}
     if warnings.get("photo_error"):
