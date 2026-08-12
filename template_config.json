@@ -1,0 +1,22 @@
+{
+  "_comment": "Configuracao do template de posts Fenrion para a F2Car. Esta é a 'zona' que fica sempre facil de consultar e editar sempre que o cliente quiser mudar algo -- cores, textos fixos, proporcoes -- sem tocar no motor de geracao.",
+  "canvas": { "width": 1080, "height": 1446 },
+  "colors": {
+    "cream_panel": "#EFEAE0",
+    "gold_tan": "#B09B7D",
+    "red_accent": "#BB2C20",
+    "dark_pill": "#3A3A3A",
+    "text_black": "#1A1A1A",
+    "text_white": "#FFFFFF",
+    "photo_bg_dark": "#3A3A3C"
+  },
+  "layout": {
+    "photo_area_frac": 0.615,
+    "cream_panel_end_frac": 0.945
+  },
+  "fixed_text": {
+    "bottom_bar": "O SEU STAND DE VIATURAS CERTIFICADAS",
+    "condition_default": "NACIONAL"
+  },
+  "logo_asset": "f2car_logo_real.png"
+}
