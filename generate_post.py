@@ -18,13 +18,27 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG = json.load(open(os.path.join(HERE, "template_config.json"), encoding="utf-8"))
 
-# Fontes: usa sempre a copia local em ./fonts/ (autocontido, funciona em
-# qualquer host de deploy sem depender de pacotes de fontes do sistema).
-# So recorre ao path de sistema do sandbox se, por algum motivo, a copia
-# local nao existir (ex: ambiente de desenvolvimento antigo).
-_LOCAL_FONT_DIR = os.path.join(HERE, "fonts")
-_SYSTEM_FONT_DIR = "/usr/share/fonts/truetype/google-fonts/"
-FONT_DIR = _LOCAL_FONT_DIR if os.path.isdir(_LOCAL_FONT_DIR) else _SYSTEM_FONT_DIR
+# Fontes: procura a copia local do .ttf em varios sitios plausiveis, para
+# ser resiliente a como o repo foi organizado (upload manual pelo GitHub
+# web UI, por exemplo, pode nao preservar a subpasta fonts/ e deixar os
+# .ttf soltos na raiz do repo). So recorre ao path de sistema do sandbox
+# se nao encontrar nenhuma copia local (ex: ambiente de desenvolvimento).
+_FONT_DIR_CANDIDATES = [
+    os.path.join(HERE, "fonts"),
+    HERE,
+    "/usr/share/fonts/truetype/google-fonts/",
+]
+
+def _resolve_font_dir():
+    for candidate in _FONT_DIR_CANDIDATES:
+        if os.path.isfile(os.path.join(candidate, "Poppins-Bold.ttf")):
+            return candidate
+    raise FileNotFoundError(
+        "Nao encontrei Poppins-Bold.ttf em nenhum destes sitios: "
+        + ", ".join(_FONT_DIR_CANDIDATES)
+    )
+
+FONT_DIR = _resolve_font_dir()
 
 def F(weight, size):
     paths = {
@@ -92,54 +106,3 @@ def render_post(vehicle, out_path):
 
     # ---------------- etiqueta de preco ----------------
     tag_right = W - 60
-    if vehicle.get("old_price"):
-        pill_w, pill_h = 260, 56
-        pill_box = [tag_right - pill_w, 470, tag_right, 470 + pill_h]
-        rounded_rect(draw, pill_box, 10, C["dark_pill"])
-        center_text(draw, (pill_box[0] + pill_box[2]) / 2, 486, f"ANTES  {vehicle['old_price']}", F("medium", 22), C["text_white"])
-        price_y0 = 470 + pill_h + 14
-    else:
-        price_y0 = 470
-
-    price_w, price_h = 300, 90
-    price_box = [tag_right - price_w, price_y0, tag_right, price_y0 + price_h]
-    rounded_rect(draw, price_box, 10, C["red_accent"])
-    center_text(draw, (price_box[0] + price_box[2]) / 2, price_y0 + 20, vehicle["price"], F("bold", 42), C["text_white"])
-
-    # ---------------- painel creme: logo + info ----------------
-    logo = Image.open(os.path.join(HERE, CONFIG["logo_asset"])).convert("RGBA")
-    logo_w = 420
-    logo_h = int(logo.height * logo_w / logo.width)
-    logo_resized = logo.resize((logo_w, logo_h), Image.LANCZOS)
-    img.paste(logo_resized, (int(W / 2 - logo_w / 2), photo_end + 30), logo_resized)
-
-    y = photo_end + 30 + logo_h + 36
-    center_text(draw, W / 2, y, vehicle["model"], F("bold", 54), C["text_black"])
-    y += 74
-
-    specs = f"{vehicle['fuel'].upper()} | {vehicle['power'].upper()} | {vehicle['km'].upper()} | {vehicle['year']} | {vehicle['gearbox'].upper()}"
-    center_text(draw, W / 2, y, specs, F("medium", 26), C["text_black"])
-    y += 46
-    center_text(draw, W / 2, y, vehicle.get("condition", CONFIG["fixed_text"]["condition_default"]), F("bolditalic", 27), C["text_black"])
-
-    # ---------------- barra dourada inferior ----------------
-    draw.rectangle([0, cream_end, W, H], fill=C["gold_tan"])
-    bar_font = F("bold", 27)
-    center_text(draw, W / 2, cream_end + (H - cream_end) / 2 - 18, CONFIG["fixed_text"]["bottom_bar"], bar_font, C["text_white"], tracking=1)
-
-    img.save(out_path)
-    return out_path
-
-
-if __name__ == "__main__":
-    # Dados de amostra -- troca-se por dados reais assim que ligarmos ao site/OnePilot.
-    vehicle = {
-        "photo_path": None,
-        "model": "Audi A3 Sportback",
-        "fuel": "Diesel", "power": "150cv", "km": "42.000kms", "year": "2022", "gearbox": "Auto",
-        "condition": "NACIONAL",
-        "price": "27.500€",
-        "old_price": None,
-    }
-    out = render_post(vehicle, os.path.join(HERE, "preview_post_amostra.png"))
-    print("gerado:", out)
