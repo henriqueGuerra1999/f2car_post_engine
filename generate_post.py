@@ -106,3 +106,54 @@ def render_post(vehicle, out_path):
 
     # ---------------- etiqueta de preco ----------------
     tag_right = W - 60
+    if vehicle.get("old_price"):
+        pill_w, pill_h = 260, 56
+        pill_box = [tag_right - pill_w, 470, tag_right, 470 + pill_h]
+        rounded_rect(draw, pill_box, 10, C["dark_pill"])
+        center_text(draw, (pill_box[0] + pill_box[2]) / 2, 486, f"ANTES  {vehicle['old_price']}", F("medium", 22), C["text_white"])
+        price_y0 = 470 + pill_h + 14
+    else:
+        price_y0 = 470
+
+    price_w, price_h = 300, 90
+    price_box = [tag_right - price_w, price_y0, tag_right, price_y0 + price_h]
+    rounded_rect(draw, price_box, 10, C["red_accent"])
+    center_text(draw, (price_box[0] + price_box[2]) / 2, price_y0 + 20, vehicle["price"], F("bold", 42), C["text_white"])
+
+    # ---------------- painel creme: logo + info ----------------
+    logo = Image.open(os.path.join(HERE, CONFIG["logo_asset"])).convert("RGBA")
+    logo_w = 420
+    logo_h = int(logo.height * logo_w / logo.width)
+    logo_resized = logo.resize((logo_w, logo_h), Image.LANCZOS)
+    img.paste(logo_resized, (int(W / 2 - logo_w / 2), photo_end + 30), logo_resized)
+
+    y = photo_end + 30 + logo_h + 36
+    center_text(draw, W / 2, y, vehicle["model"], F("bold", 54), C["text_black"])
+    y += 74
+
+    specs = f"{vehicle['fuel'].upper()} | {vehicle['power'].upper()} | {vehicle['km'].upper()} | {vehicle['year']} | {vehicle['gearbox'].upper()}"
+    center_text(draw, W / 2, y, specs, F("medium", 26), C["text_black"])
+    y += 46
+    center_text(draw, W / 2, y, vehicle.get("condition", CONFIG["fixed_text"]["condition_default"]), F("bolditalic", 27), C["text_black"])
+
+    # ---------------- barra dourada inferior ----------------
+    draw.rectangle([0, cream_end, W, H], fill=C["gold_tan"])
+    bar_font = F("bold", 27)
+    center_text(draw, W / 2, cream_end + (H - cream_end) / 2 - 18, CONFIG["fixed_text"]["bottom_bar"], bar_font, C["text_white"], tracking=1)
+
+    img.save(out_path, format="PNG")
+    return out_path
+
+
+if __name__ == "__main__":
+    # Dados de amostra -- troca-se por dados reais assim que ligarmos ao site/OnePilot.
+    vehicle = {
+        "photo_path": None,
+        "model": "Audi A3 Sportback",
+        "fuel": "Diesel", "power": "150cv", "km": "42.000kms", "year": "2022", "gearbox": "Auto",
+        "condition": "NACIONAL",
+        "price": "27.500€",
+        "old_price": None,
+    }
+    out = render_post(vehicle, os.path.join(HERE, "preview_post_amostra.png"))
+    print("gerado:", out)
