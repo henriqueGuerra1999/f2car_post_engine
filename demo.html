@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fenrion AI — Pré-visualização</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0a10; --bg-alt:#0c0c13; --card:#101119;
+    --coral:#ff5a4e; --gold:#ffb347; --orange:#ff7a30; --orange-2:#ff8a5c;
+    --white:#f2f3f6; --white-soft:#eaeaea; --body:#c9cdd7; --muted:#99a1b1;
+    --faint:#78828c; --divider:#28262e;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; background:var(--bg); color:var(--body); font-family:'Inter',-apple-system,sans-serif; }
+  .wrap{ max-width:1080px; margin:0 auto; padding:56px 24px 90px; }
+
+  .top{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:8px; }
+  .brand{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:26px; color:var(--white-soft); }
+  .brand span{ color:var(--orange); }
+  .brand-sub{ font-size:10.5px; letter-spacing:2.5px; color:var(--muted); text-transform:uppercase; margin-top:2px; }
+
+  h1{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:28px; color:var(--white-soft); margin:34px 0 6px; }
+  .lede{ font-size:14px; color:var(--muted); max-width:620px; line-height:1.6; margin-bottom:40px; }
+
+  .status{ font-size:13.5px; color:var(--muted); padding:60px 0; text-align:center; }
+  .status .dot{ display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--orange); margin-right:8px; animation:pulse 1.2s infinite ease-in-out; }
+  @keyframes pulse{ 0%,100%{ opacity:0.3; } 50%{ opacity:1; } }
+
+  .vgrid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:4px; }
+  .vcard{ position:relative; border-radius:4px; overflow:hidden; background:var(--card); aspect-ratio:4/5; }
+  .vcard img{ width:100%; height:100%; object-fit:cover; display:block; }
+
+  .foot{ margin-top:50px; padding-top:24px; border-top:1px solid var(--divider); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; font-size:11.5px; color:var(--faint); }
+
+  .empty{ text-align:center; padding:70px 0; color:var(--faint); font-size:13.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div>
+      <div class="brand">FENRION <span>AI</span></div>
+      <div class="brand-sub">AI COM INSTINTO</div>
+    </div>
+  </div>
+
+  <h1 id="title">Pré-visualização de conteúdo</h1>
+  <div class="lede" id="lede">A gerar os próximos posts a partir do inventário atual — sem qualquer edição manual.</div>
+
+  <div id="content">
+    <div class="status"><span class="dot"></span>A ligar ao inventário e a preparar as imagens…</div>
+  </div>
+
+  <div class="foot">
+    <span id="foot-left"></span>
+    <span>Fenrion AI — conteúdo gerado e publicado automaticamente</span>
+  </div>
+
+</div>
+
+<script>
+const clientId = window.location.pathname.split("/").filter(Boolean).pop();
+
+async function safeJson(url){
+  try{
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return await res.json();
+  }catch(e){ return null; }
+}
+
+async function load(){
+  const clients = await safeJson("/clientes");
+  const clientName = (clients && clients[clientId] && clients[clientId].name) || clientId;
+  document.getElementById("lede").textContent =
+    `A gerar os próximos posts para ${clientName} a partir do inventário atual — sem qualquer edição manual.`;
+  document.getElementById("foot-left").textContent = `Cliente: ${clientName}`;
+
+  const critData = await safeJson(`/criterios/${clientId}`);
+  const criteria = (critData && critData.criteria) || {};
+
+  const res = await fetch(`/preview-imagens/${clientId}?criteria=${encodeURIComponent(JSON.stringify(criteria))}&limit=12`);
+  if (!res.ok){
+    document.getElementById("content").innerHTML = `<div class="empty">Não foi possível carregar a pré-visualização de momento.</div>`;
+    return;
+  }
+  const data = await res.json();
+  const withImage = data.resultados.filter(r => r.image_url);
+
+  if (!withImage.length){
+    document.getElementById("content").innerHTML = `<div class="empty">Sem viaturas a mostrar de momento.</div>`;
+    return;
+  }
+
+  document.getElementById("content").innerHTML = `<div class="vgrid">` +
+    withImage.map(r => `<div class="vcard"><img src="${r.image_url}" alt="${r.vehicle.model}"></div>`).join("") +
+    `</div>`;
+}
+
+load();
+</script>
+</body>
+</html>

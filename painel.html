@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Painel de Critérios — Fenrion AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0a10; --bg-alt:#0c0c13; --card:#101119; --card-2:#0e0f16;
+    --coral:#ff5a4e; --gold:#ffb347; --orange:#ff7a30; --orange-2:#ff8a5c;
+    --white:#f2f3f6; --white-soft:#eaeaea; --body:#c9cdd7; --muted:#99a1b1;
+    --faint:#78828c; --divider:#28262e; --green:#4fae7c;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; background:var(--bg); color:var(--body); font-family:'Inter',-apple-system,sans-serif; }
+  h1,h2,h3,.disp{ font-family:'Space Grotesk',sans-serif; }
+  .wrap{ max-width:1080px; margin:0 auto; padding:36px 24px 80px; }
+
+  .top{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px; margin-bottom:30px; }
+  .brand{ font-weight:700; font-size:26px; color:var(--white-soft); letter-spacing:0.2px; }
+  .brand span{ color:var(--orange); }
+  .brand-sub{ font-size:10.5px; letter-spacing:2.5px; color:var(--muted); text-transform:uppercase; margin-top:2px; }
+  .tag{ font-size:11px; font-weight:600; letter-spacing:1px; color:var(--orange-2); background:#221513; border:1px solid #5a2c16; border-radius:20px; padding:6px 14px; text-transform:uppercase; }
+
+  select#client{
+    background:var(--card); color:var(--white-soft); border:1px solid var(--divider);
+    border-radius:8px; padding:10px 14px; font-family:'Inter'; font-size:14px; font-weight:600;
+  }
+
+  .card{ background:var(--card); border:1px solid var(--divider); border-radius:14px; padding:26px 28px; margin-bottom:22px; }
+  .card h2{ font-size:17px; font-weight:600; color:var(--white-soft); margin:0 0 18px; letter-spacing:0.3px; }
+
+  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px 22px; }
+  .grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px 22px; }
+  @media (max-width:720px){ .grid,.grid3{ grid-template-columns:1fr; } }
+
+  label{ display:block; font-size:12px; font-weight:600; color:var(--white-soft); margin-bottom:6px; }
+  label .opt{ font-weight:400; color:var(--faint); }
+  input[type=text], input[type=number]{
+    width:100%; background:var(--bg-alt); border:1px solid var(--divider); border-radius:8px;
+    color:var(--white-soft); font-family:'Inter'; font-size:14px; padding:10px 12px; outline:none;
+  }
+  input:focus{ border-color:var(--orange); }
+  .field{ margin-bottom:16px; }
+  .row2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{ position:relative; }
+  .chip input{ position:absolute; opacity:0; inset:0; cursor:pointer; margin:0; }
+  .chip span{
+    display:inline-block; padding:8px 14px; border-radius:20px; border:1px solid var(--divider);
+    background:var(--bg-alt); color:var(--muted); font-size:12.5px; font-weight:600; cursor:pointer; user-select:none;
+  }
+  .chip input:checked + span{ background:#3a1c10; border-color:var(--orange); color:var(--orange-2); }
+
+  .actions{ display:flex; gap:12px; flex-wrap:wrap; margin-top:6px; }
+  button{
+    font-family:'Inter'; font-weight:600; font-size:13.5px; border-radius:8px; padding:12px 20px;
+    border:none; cursor:pointer; letter-spacing:0.2px;
+  }
+  .btn-primary{ background:var(--orange); color:#1a0b02; }
+  .btn-primary:hover{ background:var(--orange-2); }
+  .btn-secondary{ background:transparent; color:var(--white-soft); border:1px solid var(--divider); }
+  .btn-secondary:hover{ border-color:var(--orange); color:var(--orange-2); }
+  button:disabled{ opacity:0.5; cursor:default; }
+
+  .status{ font-size:12.5px; margin-top:12px; padding:10px 14px; border-radius:8px; display:none; }
+  .status.show{ display:block; }
+  .status.ok{ background:#122019; color:var(--green); border:1px solid #1f4433; }
+  .status.err{ background:#221012; color:var(--coral); border:1px solid #5a2229; }
+  .status.info{ background:#141a24; color:#8fb4e0; border:1px solid #22364d; }
+
+  .meta-line{ font-size:12px; color:var(--faint); margin-top:4px; }
+
+  .results-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px; }
+  .count{ font-size:13px; color:var(--muted); }
+  .count b{ color:var(--white-soft); }
+
+  .vgrid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:16px; }
+  .vcard{ background:var(--card-2); border:1px solid var(--divider); border-radius:12px; overflow:hidden; }
+  .vcard img{ width:100%; aspect-ratio:4/5; object-fit:cover; display:block; background:#1a1b22; }
+  .vcard .ph{ width:100%; aspect-ratio:4/5; display:flex; align-items:center; justify-content:center; color:var(--faint); font-size:12px; text-align:center; padding:14px; }
+  .vcard .body{ padding:14px 14px 16px; }
+  .vcard .model{ font-weight:700; font-size:14px; color:var(--white-soft); margin-bottom:4px; }
+  .vcard .specs{ font-size:11px; color:var(--muted); margin-bottom:8px; line-height:1.5; }
+  .vcard .price-row{ display:flex; align-items:baseline; gap:8px; }
+  .vcard .price{ font-weight:700; color:var(--coral); font-size:15px; }
+  .vcard .old{ font-size:11.5px; color:var(--faint); text-decoration:line-through; }
+  .vcard .discount{ display:inline-block; margin-top:6px; font-size:10.5px; font-weight:700; color:var(--gold); background:#2a2210; border-radius:5px; padding:2px 7px; }
+
+  .empty{ color:var(--faint); font-size:13.5px; padding:20px 0; text-align:center; }
+  .loader{ color:var(--muted); font-size:13px; padding:14px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div>
+      <div class="brand">FENRION <span>AI</span></div>
+      <div class="brand-sub">PAINEL DE CRITÉRIOS</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span class="tag">Uso interno</span>
+      <select id="client"></select>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Critérios de seleção</h2>
+
+    <div class="grid">
+      <div class="field">
+        <label>Marcas a incluir <span class="opt">(vazio = todas)</span></label>
+        <input type="text" id="brands_include" placeholder="ex: BMW, Audi">
+      </div>
+      <div class="field">
+        <label>Marcas a excluir</label>
+        <input type="text" id="brands_exclude" placeholder="ex: Fiat, Renault">
+      </div>
+    </div>
+
+    <div class="grid3">
+      <div class="field">
+        <div class="row2">
+          <div>
+            <label>Preço mín. (€)</label>
+            <input type="number" id="price_min" placeholder="0">
+          </div>
+          <div>
+            <label>Preço máx. (€)</label>
+            <input type="number" id="price_max" placeholder="sem limite">
+          </div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Desconto mínimo (%) <span class="opt">vs. campanha</span></label>
+        <input type="number" id="min_discount_pct" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Máx. posts / semana <span class="opt">(para o motor de publicação)</span></label>
+        <input type="number" id="max_posts_per_week" placeholder="sem limite">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Combustível <span class="opt">(vazio = todos)</span></label>
+      <div class="chips" id="fuels-chips"></div>
+    </div>
+
+    <div class="field">
+      <label>Dias sem publicar <span class="opt">(para o motor de publicação)</span></label>
+      <div class="chips" id="days-chips"></div>
+    </div>
+
+    <div class="field">
+      <label class="chip" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" id="only_with_campaign" style="position:static; opacity:1; width:16px; height:16px; margin:0;">
+        <span style="background:none;border:none;padding:0;color:var(--body);font-weight:400;">Mostrar só viaturas com campanha/desconto ativo</span>
+      </label>
+    </div>
+
+    <div class="actions">
+      <button class="btn-primary" id="btn-preview">Pré-visualizar</button>
+      <button class="btn-secondary" id="btn-save">Guardar critérios</button>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="meta-line" id="meta-line"></div>
+  </div>
+
+  <div class="card">
+    <div class="results-head">
+      <h2 style="margin:0;">Viaturas que passam no filtro</h2>
+      <div class="count" id="count"></div>
+    </div>
+    <div id="results"><div class="empty">Ajusta os critérios acima e clica em "Pré-visualizar".</div></div>
+    <div class="actions" id="gen-actions" style="display:none; margin-top:18px;">
+      <button class="btn-secondary" id="btn-gen-images">Gerar imagens dos posts (máx. 8)</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const FUELS = ["Gasolina","Diesel","Híbrido","Elétrico","GPL"];
+const DAYS = [["Seg",0],["Ter",1],["Qua",2],["Qui",3],["Sex",4],["Sáb",5],["Dom",6]];
+
+const fuelsBox = document.getElementById("fuels-chips");
+FUELS.forEach(f => {
+  fuelsBox.insertAdjacentHTML("beforeend", `<label class="chip"><input type="checkbox" value="${f}" class="fuel-chk"><span>${f}</span></label>`);
+});
+const daysBox = document.getElementById("days-chips");
+DAYS.forEach(([label,val]) => {
+  daysBox.insertAdjacentHTML("beforeend", `<label class="chip"><input type="checkbox" value="${val}" class="day-chk"><span>${label}</span></label>`);
+});
+
+let currentMatched = [];
+let currentClient = null;
+
+function showStatus(msg, type){
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = "status show " + type;
+}
+function hideStatus(){
+  document.getElementById("status").className = "status";
+}
+
+function collectCriteria(){
+  const parseList = (id) => document.getElementById(id).value.split(",").map(s=>s.trim()).filter(Boolean);
+  const num = (id) => { const v = document.getElementById(id).value; return v === "" ? null : Number(v); };
+  return {
+    brands_include: parseList("brands_include"),
+    brands_exclude: parseList("brands_exclude"),
+    price_min: num("price_min"),
+    price_max: num("price_max"),
+    min_discount_pct: num("min_discount_pct"),
+    max_posts_per_week: num("max_posts_per_week"),
+    only_with_campaign: document.getElementById("only_with_campaign").checked,
+    fuels: [...document.querySelectorAll(".fuel-chk:checked")].map(el=>el.value),
+    skip_weekdays: [...document.querySelectorAll(".day-chk:checked")].map(el=>Number(el.value)),
+  };
+}
+
+function applyCriteria(c){
+  document.getElementById("brands_include").value = (c.brands_include||[]).join(", ");
+  document.getElementById("brands_exclude").value = (c.brands_exclude||[]).join(", ");
+  document.getElementById("price_min").value = c.price_min ?? "";
+  document.getElementById("price_max").value = c.price_max ?? "";
+  document.getElementById("min_discount_pct").value = c.min_discount_pct ?? "";
+  document.getElementById("max_posts_per_week").value = c.max_posts_per_week ?? "";
+  document.getElementById("only_with_campaign").checked = !!c.only_with_campaign;
+  document.querySelectorAll(".fuel-chk").forEach(el => el.checked = (c.fuels||[]).includes(el.value));
+  document.querySelectorAll(".day-chk").forEach(el => el.checked = (c.skip_weekdays||[]).includes(Number(el.value)));
+}
+
+async function loadClients(){
+  const res = await fetch("/clientes");
+  const clients = await res.json();
+  const sel = document.getElementById("client");
+  sel.innerHTML = Object.entries(clients).map(([id,c]) => `<option value="${id}">${c.name}</option>`).join("");
+  currentClient = sel.value;
+  await loadCriteria();
+  sel.addEventListener("change", async () => { currentClient = sel.value; await loadCriteria(); });
+}
+
+async function loadCriteria(){
+  hideStatus();
+  document.getElementById("meta-line").textContent = "";
+  try{
+    const res = await fetch(`/criterios/${currentClient}`);
+    const data = await res.json();
+    applyCriteria(data.criteria || {});
+    if (data.updated_at) {
+      document.getElementById("meta-line").textContent = "Guardado pela última vez em " + new Date(data.updated_at).toLocaleString("pt-PT");
+    }
+  }catch(e){
+    // sem BD ligada ainda -- segue com o formulario vazio
+  }
+}
+
+function renderResults(vehicles){
+  currentMatched = vehicles;
+  const box = document.getElementById("results");
+  document.getElementById("count").innerHTML = `<b>${vehicles.length}</b> viatura(s) passam no filtro`;
+  document.getElementById("gen-actions").style.display = vehicles.length ? "flex" : "none";
+  if (!vehicles.length){
+    box.innerHTML = `<div class="empty">Nenhuma viatura do inventário atual passa nestes critérios.</div>`;
+    return;
+  }
+  box.innerHTML = `<div class="vgrid">` + vehicles.map((v,i) => `
+    <div class="vcard" data-idx="${i}">
+      <div class="ph" data-ph>Imagem do post ainda não gerada</div>
+      <div class="body">
+        <div class="model">${v.model}</div>
+        <div class="specs">${[v.fuel,v.power,v.km,v.year,v.gearbox].filter(Boolean).join(" · ")}</div>
+        <div class="price-row">
+          <span class="price">${v.price ?? "—"}</span>
+          ${v.old_price ? `<span class="old">${v.old_price}</span>` : ""}
+        </div>
+      </div>
+    </div>
+  `).join("") + `</div>`;
+}
+
+document.getElementById("btn-preview").addEventListener("click", async () => {
+  hideStatus();
+  const btn = document.getElementById("btn-preview");
+  btn.disabled = true;
+  document.getElementById("results").innerHTML = `<div class="loader">A ler o inventário ao vivo…</div>`;
+  try{
+    const criteria = collectCriteria();
+    const res = await fetch(`/viaturas/${currentClient}?criteria=${encodeURIComponent(JSON.stringify(criteria))}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Erro ao pré-visualizar.");
+    renderResults(data.viaturas);
+  }catch(e){
+    document.getElementById("results").innerHTML = `<div class="empty">${e.message}</div>`;
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("btn-save").addEventListener("click", async () => {
+  hideStatus();
+  const btn = document.getElementById("btn-save");
+  btn.disabled = true;
+  try{
+    const criteria = collectCriteria();
+    const res = await fetch(`/criterios/${currentClient}`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(criteria),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Erro ao guardar.");
+    showStatus("Critérios guardados.", "ok");
+    document.getElementById("meta-line").textContent = "Guardado pela última vez em " + new Date().toLocaleString("pt-PT");
+  }catch(e){
+    showStatus(e.message, "err");
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("btn-gen-images").addEventListener("click", async () => {
+  hideStatus();
+  const btn = document.getElementById("btn-gen-images");
+  btn.disabled = true;
+  btn.textContent = "A gerar imagens…";
+  try{
+    const criteria = collectCriteria();
+    const res = await fetch(`/preview-imagens/${currentClient}?criteria=${encodeURIComponent(JSON.stringify(criteria))}&limit=8`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Erro ao gerar imagens.");
+    data.resultados.forEach((r, i) => {
+      const card = document.querySelector(`.vcard[data-idx="${i}"] [data-ph]`);
+      if (!card) return;
+      if (r.image_url){
+        card.outerHTML = `<img src="${r.image_url}" data-ph>`;
+      } else {
+        card.textContent = "Falha a gerar esta imagem.";
+      }
+    });
+  }catch(e){
+    showStatus(e.message, "err");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "Gerar imagens dos posts (máx. 8)";
+  }
+});
+
+loadClients();
+</script>
+</body>
+</html>
