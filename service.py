@@ -35,17 +35,24 @@ Deploy (Render/Railway, ou qualquer host com Docker/Python):
     uvicorn service:app --host 0.0.0.0 --port $PORT
 """
 import io
+import json
 import os
 import tempfile
 import uuid
 
 import requests
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import Response
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from generate_post import render_post
+from extract_onepilot_inventory import (
+    extract_vehicles_from_html,
+    fetch_live_html,
+    passes_filters,
+    to_post_vehicle,
+)
 
 app = FastAPI(title="Fenrion F2Car Post Generator")
 
@@ -56,6 +63,55 @@ app = FastAPI(title="Fenrion F2Car Post Generator")
 _IMAGES_DIR = os.path.join(tempfile.gettempdir(), "fenrion_imagens")
 os.makedirs(_IMAGES_DIR, exist_ok=True)
 app.mount("/imagens", StaticFiles(directory=_IMAGES_DIR), name="imagens")
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+# Registo de clientes conhecidos -- ponto unico a estender quando houver
+# mais stands a usar o painel de criterios. client_id e a chave usada em
+# todos os endpoints /criterios, /viaturas e /preview-imagens.
+CLIENTS = {
+    "f2car": {"name": "F2Car", "inventory_url": "https://f2car.com/viaturas"},
+}
+
+
+# ---------------------------------------------------------------- Postgres
+# Guarda os criterios de cada cliente (marca, preco, combustivel, desconto
+# minimo, etc.) definidos no painel. DATABASE_URL vem da instancia Postgres
+# da Render (fenrion-clientes-db) -- tem de ser ligada manualmente como
+# variavel de ambiente do servico (ver painel da Render > Environment).
+def _db_conn():
+    dsn = os.environ.get("DATABASE_URL")
+    if not dsn:
+        raise HTTPException(
+            status_code=503,
+            detail="DATABASE_URL nao configurada neste servico -- liga a base de dados fenrion-clientes-db nas Environment Variables da Render.",
+        )
+    import psycopg2
+    return psycopg2.connect(dsn, sslmode="require", connect_timeout=10)
+
+
+@app.on_event("startup")
+def _ensure_schema():
+    # Nao falha o arranque do servico se a BD ainda nao estiver ligada --
+    # so regista o aviso, para o resto da API (geracao de posts) continuar
+    # a funcionar mesmo sem DATABASE_URL configurada.
+    try:
+        conn = _db_conn()
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS client_criteria (
+                    client_id TEXT PRIMARY KEY,
+                    criteria JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                );
+                """
+            )
+        conn.close()
+    except HTTPException:
+        print("[startup] DATABASE_URL nao definida -- /criterios ficara indisponivel ate ligares a BD.")
+    except Exception as e:
+        print(f"[startup] Nao consegui preparar a tabela client_criteria: {e}")
 
 
 class VehiclePayload(BaseModel):
@@ -141,3 +197,133 @@ def gerar_post_url(payload: VehiclePayload, request: Request):
         "image_url": f"{base_url}/imagens/{filename}",
         "warnings": warnings,
     }
+
+
+# ============================================================
+# Painel de criterios (uso interno -- Henrique, durante a chamada de venda)
+# ============================================================
+#
+# Fluxo: o painel HTML (/painel) permite escolher um cliente, ajustar
+# criterios (marca, gama de preco, combustivel, desconto minimo, dias sem
+# publicar) e ver de imediato quais as viaturas do inventario ao vivo que
+# passariam no filtro -- com o post ja gerado, tal como ficaria no
+# Instagram. So depois de validado e que os criterios ficam guardados
+# (POST /criterios/<cliente>), para o motor de publicacao os poder
+# respeitar no futuro.
+
+
+@app.get("/clientes")
+def listar_clientes():
+    return CLIENTS
+
+
+@app.get("/criterios/{client_id}")
+def get_criterios(client_id: str):
+    conn = _db_conn()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT criteria, updated_at FROM client_criteria WHERE client_id = %s", (client_id,))
+            row = cur.fetchone()
+        if not row:
+            return {"client_id": client_id, "criteria": {}, "updated_at": None}
+        return {"client_id": client_id, "criteria": row[0], "updated_at": row[1].isoformat()}
+    finally:
+        conn.close()
+
+
+@app.post("/criterios/{client_id}")
+def guardar_criterios(client_id: str, criteria: dict = Body(...)):
+    conn = _db_conn()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO client_criteria (client_id, criteria, updated_at)
+                VALUES (%s, %s, now())
+                ON CONFLICT (client_id) DO UPDATE SET criteria = EXCLUDED.criteria, updated_at = now()
+                """,
+                (client_id, json.dumps(criteria)),
+            )
+        return {"ok": True, "client_id": client_id}
+    finally:
+        conn.close()
+
+
+def _fetch_filtered_vehicles(client_id: str, criteria_json: str):
+    client = CLIENTS.get(client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail=f"Cliente '{client_id}' desconhecido. Ver /clientes.")
+    try:
+        criteria = json.loads(criteria_json) if criteria_json else {}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Parametro 'criteria' tem de ser JSON valido.")
+
+    try:
+        html = fetch_live_html(client["inventory_url"])
+        raw_vehicles = extract_vehicles_from_html(html)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Falha a ler o inventario ao vivo de {client['inventory_url']}: {e}")
+
+    matched = [v for v in raw_vehicles if passes_filters(v, criteria)]
+    return client, criteria, matched
+
+
+@app.get("/viaturas/{client_id}")
+def get_viaturas(client_id: str, criteria: str = "{}"):
+    client, crit, matched = _fetch_filtered_vehicles(client_id, criteria)
+    vehicles = [to_post_vehicle(v) for v in matched]
+    for v in vehicles:
+        v.pop("photo_path", None)
+    return {
+        "client_id": client_id,
+        "total_no_inventario": None,
+        "total_disponivel": len(matched),
+        "criteria_aplicados": crit,
+        "viaturas": vehicles,
+    }
+
+
+@app.get("/preview-imagens/{client_id}")
+def get_preview_imagens(client_id: str, request: Request, criteria: str = "{}", limit: int = 8):
+    client, crit, matched = _fetch_filtered_vehicles(client_id, criteria)
+    matched = matched[: max(1, min(limit, 20))]
+
+    base_url = str(request.base_url).rstrip("/")
+    results = []
+    for raw in matched:
+        vehicle = to_post_vehicle(raw)
+        photo_url = vehicle.pop("photo_url", None)
+        payload = VehiclePayload(**{k: v for k, v in vehicle.items() if k in VehiclePayload.model_fields}, photo_url=photo_url)
+
+        filename = f"{uuid.uuid4()}.png"
+        out_path = os.path.join(_IMAGES_DIR, filename)
+        try:
+            warnings = _generate(payload, out_path)
+            image_url = f"{base_url}/imagens/{filename}"
+        except HTTPException as e:
+            warnings = {"error": str(e.detail)}
+            image_url = None
+
+        results.append({"vehicle": vehicle, "image_url": image_url, "warnings": warnings})
+
+    return {"client_id": client_id, "criteria_aplicados": crit, "resultados": results}
+
+
+@app.get("/painel", response_class=FileResponse)
+def painel():
+    path = os.path.join(HERE, "painel.html")
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="painel.html nao encontrado no servico.")
+    return FileResponse(path, media_type="text/html")
+
+
+@app.get("/demo/{client_id}", response_class=FileResponse)
+def demo(client_id: str):
+    # Pagina de demo para partilhar com o cliente/prospect -- so leitura,
+    # sem nenhum controlo de filtro visivel. O client_id na URL identifica
+    # o cliente (ex: /demo/f2car); o proprio demo.html le-o do path e usa
+    # os criterios ja guardados em /criterios/<client_id> (se existirem).
+    path = os.path.join(HERE, "demo.html")
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="demo.html nao encontrado no servico.")
+    return FileResponse(path, media_type="text/html")
