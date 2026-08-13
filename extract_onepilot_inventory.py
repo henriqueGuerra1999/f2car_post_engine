@@ -21,6 +21,81 @@ OnePilot -- e a mesma framework a gerar o mesmo tipo de payload.
 import json
 
 
+def fetch_live_html(url: str, timeout: int = 20) -> str:
+    """Vai buscar o HTML ao vivo da pagina de viaturas de um stand OnePilot.
+    Usado pelo painel de criterios para pre-visualizar o inventario atual
+    sem depender de um ficheiro carregado manualmente."""
+    import requests
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+        )
+    }
+    resp = requests.get(url, headers=headers, timeout=timeout)
+    resp.raise_for_status()
+    return resp.text
+
+
+def compute_pricing(v: dict):
+    """Devolve (preco_atual, preco_antes|None, desconto_pct) a partir do
+    registo bruto do OnePilot -- a mesma logica de campanha usada em
+    to_post_vehicle, mas so com os numeros (sem formatacao), para ser
+    reutilizavel tanto na geracao do post como na filtragem de criterios."""
+    campaign = v.get("campaign")
+    if campaign and campaign.get("value"):
+        current = campaign["value"]
+        old = v.get("price")
+    else:
+        current = v.get("price")
+        old = None
+    discount_pct = 0.0
+    if old and current and old > 0:
+        discount_pct = round((old - current) / old * 100, 1)
+    return current, old, discount_pct
+
+
+def passes_filters(v: dict, criteria: dict) -> bool:
+    """Aplica os criterios definidos no painel (marca, preco, combustivel,
+    desconto minimo, so-com-campanha) a um registo bruto do OnePilot.
+    Criterios ausentes/vazios sao ignorados (nao filtram nada)."""
+    if v.get("status") != "available":
+        return False
+
+    current, old, discount_pct = compute_pricing(v)
+    if current is None:
+        return False
+
+    brand = (v.get("brand") or "").strip().lower()
+    brands_include = [b.strip().lower() for b in criteria.get("brands_include", []) if b.strip()]
+    brands_exclude = [b.strip().lower() for b in criteria.get("brands_exclude", []) if b.strip()]
+    if brands_include and brand not in brands_include:
+        return False
+    if brands_exclude and brand in brands_exclude:
+        return False
+
+    price_min = criteria.get("price_min")
+    price_max = criteria.get("price_max")
+    if price_min is not None and current < price_min:
+        return False
+    if price_max is not None and current > price_max:
+        return False
+
+    fuel = (v.get("fuel") or "").strip().lower()
+    fuels = [f.strip().lower() for f in criteria.get("fuels", []) if f.strip()]
+    if fuels and fuel not in fuels:
+        return False
+
+    if criteria.get("only_with_campaign") and not old:
+        return False
+
+    min_discount_pct = criteria.get("min_discount_pct")
+    if min_discount_pct is not None and discount_pct < min_discount_pct:
+        return False
+
+    return True
+
+
 def extract_vehicles_from_html(html: str):
     marker = html.find('\\"data\\":[')
     if marker == -1:
