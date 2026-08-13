@@ -107,11 +107,45 @@ def _ensure_schema():
                 );
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS client_templates (
+                    client_id TEXT PRIMARY KEY,
+                    config JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                );
+                """
+            )
         conn.close()
     except HTTPException:
-        print("[startup] DATABASE_URL nao definida -- /criterios ficara indisponivel ate ligares a BD.")
+        print("[startup] DATABASE_URL nao definida -- /criterios e /template ficarao indisponiveis ate ligares a BD.")
     except Exception as e:
-        print(f"[startup] Nao consegui preparar a tabela client_criteria: {e}")
+        print(f"[startup] Nao consegui preparar as tabelas client_criteria/client_templates: {e}")
+
+
+# Chaves aceites num template customizado (upload no painel). logo_asset fica
+# de fora de proposito -- ver nota em generate_post.merge_config.
+_TEMPLATE_ALLOWED_KEYS = {"canvas", "colors", "layout", "fixed_text"}
+
+
+def _get_client_template(client_id: str):
+    """Devolve o template customizado guardado para este cliente, ou None se
+    nao houver BD ligada ou nao houver nenhum guardado -- em qualquer dos
+    casos o motor cai no template_config.json por omissao (nao propaga erro,
+    a pre-visualizacao nao deve falhar so por causa disto)."""
+    try:
+        conn = _db_conn()
+    except HTTPException:
+        return None
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT config FROM client_templates WHERE client_id = %s", (client_id,))
+            row = cur.fetchone()
+        return row[0] if row and row[0] else None
+    except Exception:
+        return None
+    finally:
+        conn.close()
 
 
 class VehiclePayload(BaseModel):
@@ -132,7 +166,7 @@ def health():
     return {"status": "ok"}
 
 
-def _generate(payload: VehiclePayload, out_path: str) -> dict:
+def _generate(payload: VehiclePayload, out_path: str, config_overrides: dict | None = None) -> dict:
     """Gera o PNG em out_path. Devolve um dict com avisos (ex: falha a
     descarregar a foto), para o chamador decidir o que fazer com eles."""
     vehicle = payload.model_dump()
@@ -159,7 +193,7 @@ def _generate(payload: VehiclePayload, out_path: str) -> dict:
     vehicle["photo_path"] = tmp_photo_path
 
     try:
-        render_post(vehicle, out_path)
+        render_post(vehicle, out_path, config_overrides=config_overrides)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Falha a gerar o post: {e}")
     finally:
@@ -170,12 +204,15 @@ def _generate(payload: VehiclePayload, out_path: str) -> dict:
 
 
 @app.post("/gerar-post")
-def gerar_post(payload: VehiclePayload):
+def gerar_post(payload: VehiclePayload, client_id: str | None = None):
     # Gera sempre em memoria (BytesIO), nunca em disco -- evita por completo
     # a classe de erro "FileNotFoundError" observada no disco efemero da
     # Render quando se grava e reabre o ficheiro na mesma request.
+    # client_id opcional: se o N8N o passar, usa o template customizado
+    # desse cliente (se houver); sem ele, usa sempre o template por omissao.
+    config_overrides = _get_client_template(client_id) if client_id else None
     buf = io.BytesIO()
-    warnings = _generate(payload, buf)
+    warnings = _generate(payload, buf, config_overrides=config_overrides)
     buf.seek(0)
     png_bytes = buf.read()
 
@@ -187,10 +224,11 @@ def gerar_post(payload: VehiclePayload):
 
 
 @app.post("/gerar-post-url")
-def gerar_post_url(payload: VehiclePayload, request: Request):
+def gerar_post_url(payload: VehiclePayload, request: Request, client_id: str | None = None):
+    config_overrides = _get_client_template(client_id) if client_id else None
     filename = f"{uuid.uuid4()}.png"
     out_path = os.path.join(_IMAGES_DIR, filename)
-    warnings = _generate(payload, out_path)
+    warnings = _generate(payload, out_path, config_overrides=config_overrides)
 
     base_url = str(request.base_url).rstrip("/")
     return {
@@ -288,6 +326,11 @@ def get_preview_imagens(client_id: str, request: Request, criteria: str = "{}", 
     client, crit, matched = _fetch_filtered_vehicles(client_id, criteria)
     matched = matched[: max(1, min(limit, 20))]
 
+    # Usa sempre o template customizado deste cliente, se houver um guardado
+    # (ver /template/<client_id>) -- e assim que uma troca de template no
+    # painel se reflete de imediato na pre-visualizacao e na demo publica.
+    config_overrides = _get_client_template(client_id)
+
     base_url = str(request.base_url).rstrip("/")
     results = []
     for raw in matched:
@@ -298,7 +341,7 @@ def get_preview_imagens(client_id: str, request: Request, criteria: str = "{}", 
         filename = f"{uuid.uuid4()}.png"
         out_path = os.path.join(_IMAGES_DIR, filename)
         try:
-            warnings = _generate(payload, out_path)
+            warnings = _generate(payload, out_path, config_overrides=config_overrides)
             image_url = f"{base_url}/imagens/{filename}"
         except HTTPException as e:
             warnings = {"error": str(e.detail)}
@@ -307,6 +350,64 @@ def get_preview_imagens(client_id: str, request: Request, criteria: str = "{}", 
         results.append({"vehicle": vehicle, "image_url": image_url, "warnings": warnings})
 
     return {"client_id": client_id, "criteria_aplicados": crit, "resultados": results}
+
+
+@app.get("/template/{client_id}")
+def get_template(client_id: str):
+    conn = _db_conn()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT config, updated_at FROM client_templates WHERE client_id = %s", (client_id,))
+            row = cur.fetchone()
+        if not row:
+            return {"client_id": client_id, "config": {}, "updated_at": None}
+        return {"client_id": client_id, "config": row[0], "updated_at": row[1].isoformat()}
+    finally:
+        conn.close()
+
+
+@app.post("/template/{client_id}")
+def guardar_template(client_id: str, config: dict = Body(...)):
+    unknown_keys = set(config.keys()) - _TEMPLATE_ALLOWED_KEYS
+    if unknown_keys:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Chaves nao suportadas no template: {sorted(unknown_keys)}. Permitidas: {sorted(_TEMPLATE_ALLOWED_KEYS)} (o logotipo ainda nao e substituivel por aqui).",
+        )
+    # Validacao minima: gera um post de teste com este template antes de o
+    # guardar, para nao deixares um template partido guardado sem saberes.
+    try:
+        buf = io.BytesIO()
+        sample = VehiclePayload(model="Modelo de Teste", price="10.000€")
+        _generate(sample, buf, config_overrides=config)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Este template nao gera um post valido: {e}")
+
+    conn = _db_conn()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO client_templates (client_id, config, updated_at)
+                VALUES (%s, %s, now())
+                ON CONFLICT (client_id) DO UPDATE SET config = EXCLUDED.config, updated_at = now()
+                """,
+                (client_id, json.dumps(config)),
+            )
+        return {"ok": True, "client_id": client_id}
+    finally:
+        conn.close()
+
+
+@app.delete("/template/{client_id}")
+def repor_template(client_id: str):
+    conn = _db_conn()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM client_templates WHERE client_id = %s", (client_id,))
+        return {"ok": True, "client_id": client_id, "reposto": "template por omissao"}
+    finally:
+        conn.close()
 
 
 @app.get("/painel", response_class=FileResponse)
