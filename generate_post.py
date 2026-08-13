@@ -68,7 +68,23 @@ def center_text(draw, cx, y, text, font, fill, tracking=0):
 def rounded_rect(draw, box, radius, fill):
     draw.rounded_rectangle(box, radius=radius, fill=fill)
 
-def render_post(vehicle, out_path):
+
+def merge_config(overrides):
+    """Combina um template_config.json parcial/customizado (vindo de um
+    cliente, ex: guardado no painel) com os valores por omissao. So as
+    seccoes canvas/colors/layout/fixed_text sao substituiveis -- o
+    logo_asset fica sempre de fora de propósito (ver nota em service.py,
+    endpoint /template): trocar o logotipo implica upload de um ficheiro
+    de imagem, que e um passo seguinte ainda nao construido."""
+    cfg = json.loads(json.dumps(CONFIG))  # copia profunda do default
+    if overrides:
+        for key in ("canvas", "colors", "layout", "fixed_text"):
+            if key in overrides and isinstance(overrides[key], dict):
+                cfg[key].update(overrides[key])
+    return cfg
+
+
+def render_post(vehicle, out_path, config_overrides=None):
     """
     vehicle = {
       "photo_path": str|None,     # None -> usa placeholder honesto
@@ -78,11 +94,15 @@ def render_post(vehicle, out_path):
       "price": "89.900€",
       "old_price": "99.000€" | None,
     }
+    config_overrides: dict opcional (canvas/colors/layout/fixed_text) para
+      sobrepor ao template_config.json por omissao -- usado quando um
+      cliente tem um template proprio guardado (ver /template/<client_id>).
     """
-    W, H = CONFIG["canvas"]["width"], CONFIG["canvas"]["height"]
-    C = {k: hex2rgb(v) for k, v in CONFIG["colors"].items()}
-    photo_end = int(H * CONFIG["layout"]["photo_area_frac"])
-    cream_end = int(H * CONFIG["layout"]["cream_panel_end_frac"])
+    cfg = merge_config(config_overrides)
+    W, H = cfg["canvas"]["width"], cfg["canvas"]["height"]
+    C = {k: hex2rgb(v) for k, v in cfg["colors"].items()}
+    photo_end = int(H * cfg["layout"]["photo_area_frac"])
+    cream_end = int(H * cfg["layout"]["cream_panel_end_frac"])
 
     img = Image.new("RGB", (W, H), C["cream_panel"])
     draw = ImageDraw.Draw(img)
@@ -94,7 +114,7 @@ def render_post(vehicle, out_path):
         # As fotos do inventario (OnePilot) vem bastante comprimidas na origem --
         # este unsharp mask compensa a maciez sem exagerar o efeito. Parametros
         # moderados (radius/percent/threshold) para nao criar artefactos visiveis.
-        photo = photo.filter(ImageFilter.UnsharpMask(radius=2, percent=130, threshold=3))
+        photo = photo.filter(ImageFilter.UnsharpMask(radius=2, percent=165, threshold=3))
         img.paste(photo, (0, 0))
     else:
         # placeholder honesto -- nunca finge ter uma foto real que nao existe
@@ -125,6 +145,8 @@ def render_post(vehicle, out_path):
     center_text(draw, (price_box[0] + price_box[2]) / 2, price_y0 + 20, vehicle["price"], F("bold", 42), C["text_white"])
 
     # ---------------- painel creme: logo + info ----------------
+    # Logo fica sempre o do template_config.json por omissao (nao e
+    # substituivel via /template ainda -- ver nota em merge_config).
     logo = Image.open(os.path.join(HERE, CONFIG["logo_asset"])).convert("RGBA")
     logo_w = 420
     logo_h = int(logo.height * logo_w / logo.width)
@@ -138,12 +160,12 @@ def render_post(vehicle, out_path):
     specs = f"{vehicle['fuel'].upper()} | {vehicle['power'].upper()} | {vehicle['km'].upper()} | {vehicle['year']} | {vehicle['gearbox'].upper()}"
     center_text(draw, W / 2, y, specs, F("medium", 26), C["text_black"])
     y += 46
-    center_text(draw, W / 2, y, vehicle.get("condition", CONFIG["fixed_text"]["condition_default"]), F("bolditalic", 27), C["text_black"])
+    center_text(draw, W / 2, y, vehicle.get("condition", cfg["fixed_text"]["condition_default"]), F("bolditalic", 27), C["text_black"])
 
     # ---------------- barra dourada inferior ----------------
     draw.rectangle([0, cream_end, W, H], fill=C["gold_tan"])
     bar_font = F("bold", 27)
-    center_text(draw, W / 2, cream_end + (H - cream_end) / 2 - 18, CONFIG["fixed_text"]["bottom_bar"], bar_font, C["text_white"], tracking=1)
+    center_text(draw, W / 2, cream_end + (H - cream_end) / 2 - 18, cfg["fixed_text"]["bottom_bar"], bar_font, C["text_white"], tracking=1)
 
     img.save(out_path, format="PNG")
     return out_path
