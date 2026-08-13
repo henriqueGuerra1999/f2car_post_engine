@@ -39,6 +39,7 @@ import json
 import os
 import tempfile
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from fastapi import Body, FastAPI, HTTPException, Request
@@ -321,6 +322,20 @@ def get_viaturas(client_id: str, criteria: str = "{}"):
     }
 
 
+def _generate_one(base_url, vehicle, config_overrides):
+    photo_url = vehicle.pop("photo_url", None)
+    payload = VehiclePayload(**{k: v for k, v in vehicle.items() if k in VehiclePayload.model_fields}, photo_url=photo_url)
+    filename = f"{uuid.uuid4()}.png"
+    out_path = os.path.join(_IMAGES_DIR, filename)
+    try:
+        warnings = _generate(payload, out_path, config_overrides=config_overrides)
+        image_url = f"{base_url}/imagens/{filename}"
+    except HTTPException as e:
+        warnings = {"error": str(e.detail)}
+        image_url = None
+    return {"vehicle": vehicle, "image_url": image_url, "warnings": warnings}
+
+
 @app.get("/preview-imagens/{client_id}")
 def get_preview_imagens(client_id: str, request: Request, criteria: str = "{}", limit: int = 8):
     client, crit, matched = _fetch_filtered_vehicles(client_id, criteria)
@@ -330,24 +345,20 @@ def get_preview_imagens(client_id: str, request: Request, criteria: str = "{}", 
     # (ver /template/<client_id>) -- e assim que uma troca de template no
     # painel se reflete de imediato na pre-visualizacao e na demo publica.
     config_overrides = _get_client_template(client_id)
-
     base_url = str(request.base_url).rstrip("/")
-    results = []
-    for raw in matched:
-        vehicle = to_post_vehicle(raw)
-        photo_url = vehicle.pop("photo_url", None)
-        payload = VehiclePayload(**{k: v for k, v in vehicle.items() if k in VehiclePayload.model_fields}, photo_url=photo_url)
+    vehicles = [to_post_vehicle(raw) for raw in matched]
 
-        filename = f"{uuid.uuid4()}.png"
-        out_path = os.path.join(_IMAGES_DIR, filename)
-        try:
-            warnings = _generate(payload, out_path, config_overrides=config_overrides)
-            image_url = f"{base_url}/imagens/{filename}"
-        except HTTPException as e:
-            warnings = {"error": str(e.detail)}
-            image_url = None
-
-        results.append({"vehicle": vehicle, "image_url": image_url, "warnings": warnings})
+    # Gera as imagens em paralelo (thread pool) em vez de uma a uma --
+    # cada geracao e sobretudo I/O (download da foto) + CPU curta (PIL),
+    # por isso threads ja ajudam bastante. Sem isto, 8-12 viaturas num
+    # unico pedido HTTP podiam facilmente passar de 60-90s e ficar
+    # vulneraveis a timeout (foi o que aconteceu na demo em rede movel).
+    results_by_index = {}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(_generate_one, base_url, v, config_overrides): i for i, v in enumerate(vehicles)}
+        for future in as_completed(futures):
+            results_by_index[futures[future]] = future.result()
+    results = [results_by_index[i] for i in range(len(vehicles))]
 
     return {"client_id": client_id, "criteria_aplicados": crit, "resultados": results}
 
