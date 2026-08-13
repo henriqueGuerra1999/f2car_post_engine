@@ -13,7 +13,7 @@ Para trocar o carro: editar o dicionario `vehicle` no fundo deste ficheiro
 (ou, na versao ligada ao inventario real, isto vem do site/OnePilot).
 """
 import json, os
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG = json.load(open(os.path.join(HERE, "template_config.json"), encoding="utf-8"))
@@ -91,6 +91,10 @@ def render_post(vehicle, out_path):
     if vehicle.get("photo_path") and os.path.exists(vehicle["photo_path"]):
         photo = Image.open(vehicle["photo_path"]).convert("RGB")
         photo = ImageOps.fit(photo, (W, photo_end), method=Image.LANCZOS)
+        # As fotos do inventario (OnePilot) vem bastante comprimidas na origem --
+        # este unsharp mask compensa a maciez sem exagerar o efeito. Parametros
+        # moderados (radius/percent/threshold) para nao criar artefactos visiveis.
+        photo = photo.filter(ImageFilter.UnsharpMask(radius=2, percent=130, threshold=3))
         img.paste(photo, (0, 0))
     else:
         # placeholder honesto -- nunca finge ter uma foto real que nao existe
