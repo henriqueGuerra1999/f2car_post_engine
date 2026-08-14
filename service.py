@@ -154,6 +154,25 @@ def _ensure_schema():
                 """
             )
             cur.execute("CREATE INDEX IF NOT EXISTS post_log_client_created_idx ON post_log (client_id, created_at DESC);")
+
+            # Semear a password de cada cliente a partir de uma variavel de
+            # ambiente DEMO_PASSWORD_<CLIENT_ID>, se ainda nao existir uma
+            # linha em client_auth para esse cliente. Isto evita precisar de
+            # acesso de escrita direto a BD so para definir/trocar a password
+            # -- basta definir a env var no Render e fazer redeploy/restart.
+            for cid in CLIENTS.keys():
+                env_key = f"DEMO_PASSWORD_{cid.upper()}"
+                raw_password = os.environ.get(env_key)
+                if not raw_password:
+                    continue
+                cur.execute("SELECT 1 FROM client_auth WHERE client_id = %s", (cid,))
+                if cur.fetchone():
+                    continue
+                cur.execute(
+                    "INSERT INTO client_auth (client_id, password_hash) VALUES (%s, %s) ON CONFLICT (client_id) DO NOTHING",
+                    (cid, _hash_password(raw_password)),
+                )
+                print(f"[startup] password inicial semeada para o cliente '{cid}' a partir de {env_key}.")
         conn.close()
     except HTTPException:
         print("[startup] DATABASE_URL nao definida -- /criterios, /template, /demo-auth e /post-log ficarao indisponiveis ate ligares a BD.")
