@@ -34,10 +34,14 @@ Deploy (Render/Railway, ou qualquer host com Docker/Python):
   - Usar o Dockerfile ao lado, ou o comando de arranque:
     uvicorn service:app --host 0.0.0.0 --port $PORT
 """
+import hashlib
+import hmac
 import io
 import json
 import os
+import secrets
 import tempfile
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -117,11 +121,127 @@ def _ensure_schema():
                 );
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS app_config (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS client_auth (
+                    client_id TEXT PRIMARY KEY,
+                    password_hash TEXT NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                );
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS post_log (
+                    id SERIAL PRIMARY KEY,
+                    client_id TEXT NOT NULL,
+                    vehicle_model TEXT,
+                    price TEXT,
+                    old_price TEXT,
+                    imagem BYTEA,
+                    source TEXT NOT NULL DEFAULT 'preview',
+                    criteria_snapshot JSONB,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                );
+                """
+            )
+            cur.execute("CREATE INDEX IF NOT EXISTS post_log_client_created_idx ON post_log (client_id, created_at DESC);")
         conn.close()
     except HTTPException:
-        print("[startup] DATABASE_URL nao definida -- /criterios e /template ficarao indisponiveis ate ligares a BD.")
+        print("[startup] DATABASE_URL nao definida -- /criterios, /template, /demo-auth e /post-log ficarao indisponiveis ate ligares a BD.")
     except Exception as e:
-        print(f"[startup] Nao consegui preparar as tabelas client_criteria/client_templates: {e}")
+        print(f"[startup] Nao consegui preparar as tabelas: {e}")
+
+
+# ---------------------------------------------------------------- Password da demo / sessao do cliente
+# A demo publica (/demo/<client_id>) fica atras de uma password por cliente.
+# Nao e seguranca de nivel bancario (os endpoints de leitura por baixo
+# continuam acessiveis a quem souber a forma da API) -- e a barreira de
+# entrada normal para uma demo profissional partilhada por link: sem a
+# password certa nao se ve conteudo nem se consegue guardar criterios.
+
+
+def _get_secret_key() -> str:
+    """Chave persistente (guardada na BD) usada para assinar os tokens de
+    sessao -- gerada uma unica vez, para nao invalidar todas as sessoes
+    ativas sempre que o servico reinicia ou faz redeploy."""
+    conn = _db_conn()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT value FROM app_config WHERE key = 'secret_key'")
+            row = cur.fetchone()
+            if row:
+                return row[0]
+            new_key = secrets.token_hex(32)
+            cur.execute(
+                "INSERT INTO app_config (key, value) VALUES ('secret_key', %s) ON CONFLICT (key) DO NOTHING",
+                (new_key,),
+            )
+        conn2 = _db_conn()
+        try:
+            with conn2, conn2.cursor() as cur2:
+                cur2.execute("SELECT value FROM app_config WHERE key = 'secret_key'")
+                return cur2.fetchone()[0]
+        finally:
+            conn2.close()
+    finally:
+        conn.close()
+
+
+def _hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200_000)
+    return salt.hex() + ":" + digest.hex()
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    try:
+        salt_hex, digest_hex = stored.split(":")
+        salt = bytes.fromhex(salt_hex)
+        expected = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200_000)
+        return hmac.compare_digest(expected.hex(), digest_hex)
+    except Exception:
+        return False
+
+
+def _make_token(client_id: str, days_valid: int = 60) -> str:
+    secret = _get_secret_key()
+    expiry = int(time.time()) + days_valid * 86400
+    msg = f"{client_id}:{expiry}"
+    sig = hmac.new(secret.encode("utf-8"), msg.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{client_id}.{expiry}.{sig}"
+
+
+def _verify_token(client_id: str, token: str) -> bool:
+    if not token:
+        return False
+    try:
+        tok_client, expiry_str, sig = token.split(".")
+        if tok_client != client_id:
+            return False
+        expiry = int(expiry_str)
+        if expiry < time.time():
+            return False
+        secret = _get_secret_key()
+        msg = f"{client_id}:{expiry}"
+        expected_sig = hmac.new(secret.encode("utf-8"), msg.encode("utf-8"), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected_sig, sig)
+    except Exception:
+        return False
+
+
+def _require_client_token(client_id: str, request: Request):
+    token = request.headers.get("x-demo-token", "")
+    if not _verify_token(client_id, token):
+        raise HTTPException(status_code=401, detail="Sessao invalida ou expirada -- introduz a password outra vez.")
 
 
 # Chaves aceites num template customizado (upload no painel). logo_asset fica
@@ -288,6 +408,35 @@ def guardar_criterios(client_id: str, criteria: dict = Body(...)):
         conn.close()
 
 
+@app.post("/demo-auth/{client_id}")
+def demo_auth(client_id: str, payload: dict = Body(...)):
+    """Login da demo publica -- verifica a password do cliente e devolve um
+    token de sessao (valido 60 dias) para o browser guardar e reutilizar nos
+    pedidos seguintes (cabecalho X-Demo-Token)."""
+    if client_id not in CLIENTS:
+        raise HTTPException(status_code=404, detail="Cliente desconhecido.")
+    password = str(payload.get("password", ""))
+    conn = _db_conn()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT password_hash FROM client_auth WHERE client_id = %s", (client_id,))
+            row = cur.fetchone()
+    finally:
+        conn.close()
+    if not row or not _verify_password(password, row[0]):
+        raise HTTPException(status_code=401, detail="Password incorreta.")
+    return {"ok": True, "token": _make_token(client_id)}
+
+
+@app.post("/demo/{client_id}/criterios")
+def guardar_criterios_cliente(client_id: str, request: Request, criteria: dict = Body(...)):
+    """Mesma logica de POST /criterios/<client_id>, mas para a vista
+    'Personalizar' da demo publica -- exige uma sessao valida (password),
+    ao contrario do endpoint interno usado pelo painel."""
+    _require_client_token(client_id, request)
+    return guardar_criterios(client_id, criteria)
+
+
 def _fetch_filtered_vehicles(client_id: str, criteria_json: str):
     client = CLIENTS.get(client_id)
     if not client:
@@ -322,7 +471,37 @@ def get_viaturas(client_id: str, criteria: str = "{}"):
     }
 
 
-def _generate_one(base_url, vehicle, config_overrides):
+def _log_post(client_id: str, vehicle: dict, image_bytes: bytes, source: str, criteria: dict):
+    """Regista uma entrada no arquivo historico de posts (ver /post-log).
+    Falha em silencio (so imprime um aviso) para nunca deitar abaixo uma
+    pre-visualizacao so por causa do registo -- e um extra, nao o essencial."""
+    try:
+        import psycopg2
+        conn = _db_conn()
+        try:
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO post_log (client_id, vehicle_model, price, old_price, imagem, source, criteria_snapshot, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, now())
+                    """,
+                    (
+                        client_id,
+                        vehicle.get("model"),
+                        vehicle.get("price"),
+                        vehicle.get("old_price"),
+                        psycopg2.Binary(image_bytes),
+                        source,
+                        json.dumps(criteria),
+                    ),
+                )
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[post_log] falha a registar post de {client_id}: {e}")
+
+
+def _generate_one(base_url, vehicle, config_overrides, client_id=None, registar=False, criteria=None):
     photo_url = vehicle.pop("photo_url", None)
     payload = VehiclePayload(**{k: v for k, v in vehicle.items() if k in VehiclePayload.model_fields}, photo_url=photo_url)
     filename = f"{uuid.uuid4()}.png"
@@ -330,6 +509,12 @@ def _generate_one(base_url, vehicle, config_overrides):
     try:
         warnings = _generate(payload, out_path, config_overrides=config_overrides)
         image_url = f"{base_url}/imagens/{filename}"
+        if registar and client_id:
+            try:
+                with open(out_path, "rb") as f:
+                    _log_post(client_id, vehicle, f.read(), "preview", criteria or {})
+            except Exception as e:
+                print(f"[post_log] falha a ler imagem gerada para registo: {e}")
     except HTTPException as e:
         warnings = {"error": str(e.detail)}
         image_url = None
@@ -337,7 +522,7 @@ def _generate_one(base_url, vehicle, config_overrides):
 
 
 @app.get("/preview-imagens/{client_id}")
-def get_preview_imagens(client_id: str, request: Request, criteria: str = "{}", limit: int = 8):
+def get_preview_imagens(client_id: str, request: Request, criteria: str = "{}", limit: int = 8, registar: bool = False):
     client, crit, matched = _fetch_filtered_vehicles(client_id, criteria)
     matched = matched[: max(1, min(limit, 20))]
 
@@ -355,7 +540,10 @@ def get_preview_imagens(client_id: str, request: Request, criteria: str = "{}", 
     # vulneraveis a timeout (foi o que aconteceu na demo em rede movel).
     results_by_index = {}
     with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = {pool.submit(_generate_one, base_url, v, config_overrides): i for i, v in enumerate(vehicles)}
+        futures = {
+            pool.submit(_generate_one, base_url, v, config_overrides, client_id, registar, crit): i
+            for i, v in enumerate(vehicles)
+        }
         for future in as_completed(futures):
             results_by_index[futures[future]] = future.result()
     results = [results_by_index[i] for i in range(len(vehicles))]
@@ -419,6 +607,70 @@ def repor_template(client_id: str):
         return {"ok": True, "client_id": client_id, "reposto": "template por omissao"}
     finally:
         conn.close()
+
+
+# ============================================================
+# Historico de posts (arquivo consultavel por Henrique e pelo cliente)
+# ============================================================
+#
+# Por agora regista pre-visualizacoes (source='preview'), ligado a partir da
+# demo -- simula o fluxo antes de termos o acesso a conta de Instagram do
+# cliente. Quando o workflow N8N passar a publicar de verdade, a mesma
+# tabela passa a receber entradas source='published' (endpoint a construir
+# nessa altura), e o Henrique disse que quer que so essas contem para o
+# historico "oficial" a partir daí.
+
+
+@app.get("/post-log/{client_id}")
+def listar_log(client_id: str, desde: str | None = None, ate: str | None = None, fonte: str | None = None, limit: int = 200):
+    conn = _db_conn()
+    try:
+        query = "SELECT id, vehicle_model, price, old_price, source, created_at FROM post_log WHERE client_id = %s"
+        params = [client_id]
+        if desde:
+            query += " AND created_at >= %s"
+            params.append(desde)
+        if ate:
+            query += " AND created_at <= %s"
+            params.append(ate)
+        if fonte:
+            query += " AND source = %s"
+            params.append(fonte)
+        query += " ORDER BY created_at DESC LIMIT %s"
+        params.append(max(1, min(limit, 500)))
+        with conn, conn.cursor() as cur:
+            cur.execute(query, params)
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+    return {
+        "client_id": client_id,
+        "entradas": [
+            {
+                "id": r[0],
+                "modelo": r[1],
+                "preco": r[2],
+                "preco_antes": r[3],
+                "fonte": r[4],
+                "criado_em": r[5].isoformat(),
+            }
+            for r in rows
+        ],
+    }
+
+
+@app.get("/post-log/{client_id}/{log_id}/imagem")
+def imagem_log(client_id: str, log_id: int):
+    conn = _db_conn()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT imagem FROM post_log WHERE client_id = %s AND id = %s", (client_id, log_id))
+            row = cur.fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        raise HTTPException(status_code=404, detail="Imagem nao encontrada.")
+    return Response(content=bytes(row[0]), media_type="image/png")
 
 
 @app.get("/painel", response_class=FileResponse)
