@@ -3,20 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Fenrion AI — Pré-visualização</title>
+<title>Fenrion AI — Acompanhamento</title>
+<meta name="robots" content="noindex, nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#0a0a10; --bg-alt:#0c0c13; --card:#101119;
+    --bg:#0a0a10; --bg-alt:#0c0c13; --card:#101119; --card-2:#0e0f16;
     --coral:#ff5a4e; --gold:#ffb347; --orange:#ff7a30; --orange-2:#ff8a5c;
     --white:#f2f3f6; --white-soft:#eaeaea; --body:#c9cdd7; --muted:#99a1b1;
-    --faint:#78828c; --divider:#28262e;
+    --faint:#78828c; --divider:#28262e; --green:#4fae7c;
   }
   *{ box-sizing:border-box; }
   html,body{ margin:0; background:var(--bg); color:var(--body); font-family:'Inter',-apple-system,sans-serif; }
-  .wrap{ max-width:1080px; margin:0 auto; padding:56px 24px 90px; }
+  .wrap{ max-width:1080px; margin:0 auto; padding:40px 24px 90px; }
 
   .top{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:8px; }
   .brand-block{ display:flex; align-items:center; gap:14px; }
@@ -25,27 +26,89 @@
   .brand span{ color:var(--orange); }
   .brand-sub{ font-size:10.5px; letter-spacing:2.5px; color:var(--muted); text-transform:uppercase; margin-top:2px; }
 
-  h1{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:28px; color:var(--white-soft); margin:34px 0 6px; }
-  .lede{ font-size:14px; color:var(--muted); max-width:620px; line-height:1.6; margin-bottom:40px; }
+  h1{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:26px; color:var(--white-soft); margin:34px 0 6px; }
+  .lede{ font-size:14px; color:var(--muted); max-width:620px; line-height:1.6; margin-bottom:30px; }
 
-  .status{ font-size:13.5px; color:var(--muted); padding:60px 0; text-align:center; }
+  /* -------- gate de password -------- */
+  .gate{ max-width:380px; margin:60px auto 0; background:var(--card); border:1px solid var(--divider); border-radius:14px; padding:34px 30px; text-align:center; }
+  .gate h2{ font-family:'Space Grotesk',sans-serif; font-size:19px; color:var(--white-soft); margin:0 0 8px; }
+  .gate p{ font-size:13px; color:var(--muted); margin:0 0 22px; line-height:1.6; }
+  .gate input{ width:100%; background:var(--bg-alt); border:1px solid var(--divider); border-radius:8px; color:var(--white-soft); font-size:15px; padding:12px 14px; outline:none; text-align:center; letter-spacing:1px; }
+  .gate input:focus{ border-color:var(--orange); }
+  .gate button{ width:100%; margin-top:14px; background:var(--orange); color:#1a0b02; border:none; border-radius:8px; padding:12px; font-weight:700; font-size:14px; cursor:pointer; }
+  .gate button:disabled{ opacity:0.5; }
+  .gate .err{ color:var(--coral); font-size:12.5px; margin-top:12px; display:none; }
+  .gate .err.show{ display:block; }
+
+  /* -------- tabs -------- */
+  .tabs{ display:flex; gap:6px; margin-bottom:26px; border-bottom:1px solid var(--divider); }
+  .tab-btn{ background:none; border:none; color:var(--muted); font-family:'Inter'; font-weight:600; font-size:13.5px; padding:10px 4px; margin-right:22px; cursor:pointer; border-bottom:2px solid transparent; }
+  .tab-btn.active{ color:var(--white-soft); border-bottom-color:var(--orange); }
+  .tab-panel{ display:none; }
+  .tab-panel.active{ display:block; }
+
+  .card{ background:var(--card); border:1px solid var(--divider); border-radius:14px; padding:24px 26px; margin-bottom:24px; }
+  .card h2{ font-family:'Space Grotesk',sans-serif; font-size:16px; font-weight:600; color:var(--white-soft); margin:0 0 14px; }
+
+  .criteria-line{ font-size:13.5px; color:var(--body); line-height:1.7; }
+  .criteria-line .empty{ color:var(--faint); }
+
+  .status{ font-size:13.5px; color:var(--muted); padding:40px 0; text-align:center; }
   .status .dot{ display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--orange); margin-right:8px; animation:pulse 1.2s infinite ease-in-out; }
   @keyframes pulse{ 0%,100%{ opacity:0.3; } 50%{ opacity:1; } }
 
-  .vgrid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:4px; }
-  .vcard{ position:relative; border-radius:4px; overflow:hidden; background:var(--card); aspect-ratio:4/5; }
+  .vgrid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:4px; }
+  .vcard{ position:relative; border-radius:4px; overflow:hidden; background:var(--card-2); aspect-ratio:4/5; }
   .vcard img{ width:100%; height:100%; object-fit:cover; display:block; }
   .vcard .skeleton{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:16px; text-align:center; }
-  .vcard .skeleton .shimmer{ position:absolute; inset:0; background:linear-gradient(100deg, var(--card) 40%, #17181f 50%, var(--card) 60%); background-size:200% 100%; animation:shimmer 1.6s infinite; }
+  .vcard .skeleton .shimmer{ position:absolute; inset:0; background:linear-gradient(100deg, var(--card-2) 40%, #17181f 50%, var(--card-2) 60%); background-size:200% 100%; animation:shimmer 1.6s infinite; }
   @keyframes shimmer{ 0%{ background-position:200% 0; } 100%{ background-position:-200% 0; } }
   .vcard .skeleton .name{ position:relative; font-size:13px; font-weight:600; color:var(--white-soft); }
   .vcard .skeleton .price{ position:relative; font-size:12px; color:var(--coral); font-weight:700; }
   .vcard.failed .skeleton .name{ color:var(--faint); }
 
-  .foot{ margin-top:50px; padding-top:24px; border-top:1px solid var(--divider); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; font-size:11.5px; color:var(--faint); }
-
-  .empty{ text-align:center; padding:70px 0; color:var(--faint); font-size:13.5px; }
+  .empty{ text-align:center; padding:50px 0; color:var(--faint); font-size:13.5px; }
   .retry{ margin-top:16px; background:var(--orange); color:#1a0b02; border:none; border-radius:8px; padding:10px 20px; font-weight:600; font-size:13px; cursor:pointer; }
+
+  .period-row{ display:flex; gap:8px; margin-bottom:16px; }
+  .period-btn{ background:var(--bg-alt); border:1px solid var(--divider); color:var(--muted); font-size:12px; font-weight:600; padding:7px 14px; border-radius:20px; cursor:pointer; }
+  .period-btn.active{ background:#3a1c10; border-color:var(--orange); color:var(--orange-2); }
+
+  .log-row{ display:flex; align-items:center; gap:14px; padding:10px 0; border-bottom:1px solid var(--divider); }
+  .log-row:last-child{ border-bottom:none; }
+  .log-row img{ width:44px; height:55px; object-fit:cover; border-radius:4px; background:var(--bg-alt); flex-shrink:0; }
+  .log-row .info{ flex:1; min-width:0; }
+  .log-row .model{ font-size:13px; font-weight:600; color:var(--white-soft); }
+  .log-row .meta{ font-size:11.5px; color:var(--faint); margin-top:2px; }
+  .log-row .price{ font-size:13px; font-weight:700; color:var(--coral); }
+
+  /* -------- formulario personalizar -------- */
+  label{ display:block; font-size:12px; font-weight:600; color:var(--white-soft); margin-bottom:6px; }
+  label .opt{ font-weight:400; color:var(--faint); }
+  input[type=text], input[type=number]{
+    width:100%; background:var(--bg-alt); border:1px solid var(--divider); border-radius:8px;
+    color:var(--white-soft); font-family:'Inter'; font-size:14px; padding:10px 12px; outline:none;
+  }
+  input:focus{ border-color:var(--orange); }
+  .field{ margin-bottom:16px; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px 22px; }
+  @media (max-width:640px){ .grid2{ grid-template-columns:1fr; } }
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{ position:relative; }
+  .chip input{ position:absolute; opacity:0; inset:0; cursor:pointer; margin:0; }
+  .chip span{ display:inline-block; padding:8px 14px; border-radius:20px; border:1px solid var(--divider); background:var(--bg-alt); color:var(--muted); font-size:12.5px; font-weight:600; cursor:pointer; user-select:none; }
+  .chip input:checked + span{ background:#3a1c10; border-color:var(--orange); color:var(--orange-2); }
+  .actions{ display:flex; gap:12px; flex-wrap:wrap; margin-top:6px; }
+  button.btn{ font-family:'Inter'; font-weight:600; font-size:13.5px; border-radius:8px; padding:12px 20px; border:none; cursor:pointer; }
+  .btn-primary{ background:var(--orange); color:#1a0b02; }
+  .btn-primary:disabled{ opacity:0.5; }
+  .form-status{ font-size:12.5px; margin-top:12px; padding:10px 14px; border-radius:8px; display:none; }
+  .form-status.show{ display:block; }
+  .form-status.ok{ background:#122019; color:var(--green); border:1px solid #1f4433; }
+  .form-status.err{ background:#221012; color:var(--coral); border:1px solid #5a2229; }
+
+  .foot{ margin-top:40px; padding-top:22px; border-top:1px solid var(--divider); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; font-size:11.5px; color:var(--faint); }
+  #main{ display:none; }
 </style>
 </head>
 <body>
@@ -61,16 +124,107 @@
     </div>
   </div>
 
-  <h1 id="title">Pré-visualização de conteúdo</h1>
-  <div class="lede" id="lede">A gerar os próximos posts a partir do inventário atual — sem qualquer edição manual.</div>
-
-  <div id="content">
-    <div class="status"><span class="dot"></span>A ligar ao inventário…</div>
+  <div id="gate" class="gate">
+    <h2>Acesso privado</h2>
+    <p id="gate-lede">Introduz a password que recebeste da Fenrion AI para veres o acompanhamento do teu conteúdo.</p>
+    <input type="password" id="gate-password" placeholder="Password" autocomplete="current-password">
+    <button id="gate-submit">Entrar</button>
+    <div class="err" id="gate-err">Password incorreta. Tenta outra vez.</div>
   </div>
 
-  <div class="foot">
-    <span id="foot-left"></span>
-    <span>Fenrion AI — conteúdo gerado e publicado automaticamente</span>
+  <div id="main">
+    <h1 id="title">Pré-visualização de conteúdo</h1>
+    <div class="lede" id="lede">A gerar os próximos posts a partir do inventário atual — sem qualquer edição manual.</div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="acompanhar">Acompanhar</button>
+      <button class="tab-btn" data-tab="personalizar">Personalizar</button>
+    </div>
+
+    <div class="tab-panel active" id="tab-acompanhar">
+      <div class="card">
+        <h2>Critérios em uso hoje</h2>
+        <div class="criteria-line" id="criteria-line">A carregar…</div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-bottom:16px;">Viaturas selecionadas</h2>
+        <div id="content"><div class="status"><span class="dot"></span>A ligar ao inventário…</div></div>
+      </div>
+
+      <div class="card">
+        <h2>Histórico</h2>
+        <div class="period-row">
+          <button class="period-btn active" data-days="7">7 dias</button>
+          <button class="period-btn" data-days="30">30 dias</button>
+          <button class="period-btn" data-days="0">Tudo</button>
+        </div>
+        <div id="log-content"><div class="status"><span class="dot"></span>A carregar histórico…</div></div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-personalizar">
+      <div class="card">
+        <h2>Ajustar critérios de seleção</h2>
+        <p style="font-size:12.5px; color:var(--muted); margin:-8px 0 20px; line-height:1.6;">
+          Define aqui o que queres que apareça nos posts diários. As alterações ficam ativas assim que guardares.
+        </p>
+
+        <div class="grid2">
+          <div class="field">
+            <label>Marcas a incluir <span class="opt">(vazio = todas)</span></label>
+            <input type="text" id="brands_include" placeholder="ex: BMW, Audi">
+          </div>
+          <div class="field">
+            <label>Marcas a excluir</label>
+            <input type="text" id="brands_exclude" placeholder="ex: Fiat, Renault">
+          </div>
+          <div class="field">
+            <label>Preço mínimo (€)</label>
+            <input type="number" id="price_min" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Preço máximo (€)</label>
+            <input type="number" id="price_max" placeholder="sem limite">
+          </div>
+          <div class="field">
+            <label>Desconto mínimo (%)</label>
+            <input type="number" id="min_discount_pct" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Máx. posts por semana</label>
+            <input type="number" id="max_posts_per_week" placeholder="sem limite">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Combustível <span class="opt">(vazio = todos)</span></label>
+          <div class="chips" id="fuels-chips"></div>
+        </div>
+
+        <div class="field">
+          <label>Dias sem publicar</label>
+          <div class="chips" id="days-chips"></div>
+        </div>
+
+        <div class="field">
+          <label class="chip" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="only_with_campaign" style="position:static; opacity:1; width:16px; height:16px; margin:0;">
+            <span style="background:none;border:none;padding:0;color:var(--body);font-weight:400;">Mostrar só viaturas com campanha/desconto ativo</span>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-primary" id="btn-save">Guardar alterações</button>
+        </div>
+        <div class="form-status" id="form-status"></div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <span id="foot-left"></span>
+      <span>Fenrion AI — conteúdo gerado e publicado automaticamente</span>
+    </div>
   </div>
 
 </div>
@@ -78,6 +232,20 @@
 <script>
 const clientId = window.location.pathname.split("/").filter(Boolean).pop();
 const LIMIT = 9;
+const TOKEN_KEY = `demo_token_${clientId}`;
+const FUELS = ["Gasolina","Diesel","Híbrido","Elétrico","GPL"];
+const DAYS = [["Seg",0],["Ter",1],["Qua",2],["Qui",3],["Sex",4],["Sáb",5],["Dom",6]];
+const DAY_NAMES = ["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"];
+
+function getToken(){ return localStorage.getItem(TOKEN_KEY) || ""; }
+function setToken(t){ localStorage.setItem(TOKEN_KEY, t); }
+function clearToken(){ localStorage.removeItem(TOKEN_KEY); }
+
+function fetchWithTimeout(url, ms, opts){
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...(opts||{}), signal: controller.signal }).finally(() => clearTimeout(timer));
+}
 
 async function safeJson(url){
   try{
@@ -87,17 +255,76 @@ async function safeJson(url){
   }catch(e){ return null; }
 }
 
-// fetch com timeout -- em vez de ficar preso indefinidamente se a rede
-// (sobretudo em dados moveis) cortar a ligacao a meio de um pedido longo
-function fetchWithTimeout(url, ms){
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+// ---------------- gate de password ----------------
+async function tentarEntrar(){
+  const pass = document.getElementById("gate-password").value;
+  const btn = document.getElementById("gate-submit");
+  const err = document.getElementById("gate-err");
+  err.classList.remove("show");
+  btn.disabled = true;
+  try{
+    const res = await fetchWithTimeout(`/demo-auth/${clientId}`, 15000, {
+      method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ password: pass }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Password incorreta.");
+    setToken(data.token);
+    mostrarConteudo();
+  }catch(e){
+    err.textContent = e.message === "Password incorreta." ? e.message : "Não foi possível validar a password agora. Tenta outra vez.";
+    err.classList.add("show");
+  }finally{
+    btn.disabled = false;
+  }
+}
+document.getElementById("gate-submit").addEventListener("click", tentarEntrar);
+document.getElementById("gate-password").addEventListener("keydown", (e) => { if (e.key === "Enter") tentarEntrar(); });
+
+function mostrarConteudo(){
+  document.getElementById("gate").style.display = "none";
+  document.getElementById("main").style.display = "block";
+  initFormChips();
+  load();
+  loadHistorico(7);
 }
 
-function cardId(v){
-  return (v.slug || v.id || v.model || Math.random()).toString().replace(/[^a-z0-9]/gi, "");
+// se ja houver um token guardado, tenta usa-lo diretamente (sem pedir password outra vez)
+if (getToken()) {
+  mostrarConteudo();
 }
+
+// ---------------- tabs ----------------
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
+  });
+});
+
+// ---------------- critérios em linguagem simples ----------------
+function fmtEuro(n){ return Number(n).toLocaleString("pt-PT") + "€"; }
+
+function describeCriteria(c){
+  const parts = [];
+  if (c.brands_include && c.brands_include.length) parts.push(`Só ${c.brands_include.join(", ")}`);
+  if (c.brands_exclude && c.brands_exclude.length) parts.push(`Sem ${c.brands_exclude.join(", ")}`);
+  if (c.price_min) parts.push(`Preço a partir de ${fmtEuro(c.price_min)}`);
+  if (c.price_max) parts.push(`Preço até ${fmtEuro(c.price_max)}`);
+  if (c.fuels && c.fuels.length) parts.push(`Combustível: ${c.fuels.join(", ")}`);
+  if (c.min_discount_pct) parts.push(`Desconto mínimo de ${c.min_discount_pct}%`);
+  if (c.only_with_campaign) parts.push(`Só com campanha/desconto ativo`);
+  if (c.max_posts_per_week) parts.push(`Até ${c.max_posts_per_week} posts por semana`);
+  if (c.skip_weekdays && c.skip_weekdays.length) {
+    parts.push(`Sem publicações: ${c.skip_weekdays.map(d => DAY_NAMES[d]).join(", ")}`);
+  }
+  if (!parts.length) return `<span class="empty" style="padding:0;">Sem filtros definidos — mostra todo o inventário disponível.</span>`;
+  return parts.map(p => `• ${p}`).join("<br>");
+}
+
+// ---------------- grelha de viaturas (Acompanhar) ----------------
+function cardId(v){ return (v.slug || v.id || v.model || Math.random()).toString().replace(/[^a-z0-9]/gi, ""); }
 
 function renderSkeletons(vehicles){
   document.getElementById("content").innerHTML = `<div class="vgrid">` +
@@ -110,13 +337,10 @@ function renderSkeletons(vehicles){
       </div>
     `).join("") + `</div>`;
 }
-
 function fillImage(v, imageUrl){
   const el = document.getElementById(`card-${cardId(v)}`);
-  if (!el) return;
-  el.innerHTML = `<img src="${imageUrl}" alt="${v.model}">`;
+  if (el) el.innerHTML = `<img src="${imageUrl}" alt="${v.model}">`;
 }
-
 function markFailed(v){
   const el = document.getElementById(`card-${cardId(v)}`);
   if (!el) return;
@@ -124,10 +348,8 @@ function markFailed(v){
   const shimmer = el.querySelector(".shimmer");
   if (shimmer) shimmer.remove();
 }
-
 function showRetry(msg){
-  document.getElementById("content").innerHTML =
-    `<div class="empty">${msg}<br><button class="retry" onclick="load()">Tentar outra vez</button></div>`;
+  document.getElementById("content").innerHTML = `<div class="empty">${msg}<br><button class="retry" onclick="load()">Tentar outra vez</button></div>`;
 }
 
 async function load(){
@@ -135,58 +357,138 @@ async function load(){
 
   const clients = await safeJson("/clientes");
   const clientName = (clients && clients[clientId] && clients[clientId].name) || clientId;
-  document.getElementById("lede").textContent =
-    `A gerar os próximos posts para ${clientName} a partir do inventário atual — sem qualquer edição manual.`;
+  document.getElementById("lede").textContent = `A gerar os próximos posts para ${clientName} a partir do inventário atual — sem qualquer edição manual.`;
   document.getElementById("foot-left").textContent = `Cliente: ${clientName}`;
+  document.getElementById("gate-lede").textContent = `Introduz a password que recebeste da Fenrion AI para veres o acompanhamento de ${clientName}.`;
 
   const critData = await safeJson(`/criterios/${clientId}`);
   const criteria = (critData && critData.criteria) || {};
+  document.getElementById("criteria-line").innerHTML = describeCriteria(criteria);
+  applyCriteriaToForm(criteria);
+
   const criteriaParam = encodeURIComponent(JSON.stringify(criteria));
 
-  // Passo 1: lista de viaturas (rapido) -- mostra logo os cartoes com
-  // nome/preco, para nunca parecer que a pagina esta parada.
   let vehiclesRes;
-  try{
-    vehiclesRes = await fetchWithTimeout(`/viaturas/${clientId}?criteria=${criteriaParam}`, 20000);
-  }catch(e){
-    showRetry("Não foi possível ligar ao inventário. Verifica a ligação e tenta outra vez.");
-    return;
-  }
-  if (!vehiclesRes.ok){
-    showRetry("Não foi possível carregar o inventário de momento.");
-    return;
-  }
+  try{ vehiclesRes = await fetchWithTimeout(`/viaturas/${clientId}?criteria=${criteriaParam}`, 20000); }
+  catch(e){ showRetry("Não foi possível ligar ao inventário. Verifica a ligação e tenta outra vez."); return; }
+  if (!vehiclesRes.ok){ showRetry("Não foi possível carregar o inventário de momento."); return; }
+
   const vehiclesData = await vehiclesRes.json();
   const vehicles = (vehiclesData.viaturas || []).slice(0, LIMIT);
-
-  if (!vehicles.length){
-    document.getElementById("content").innerHTML = `<div class="empty">Sem viaturas a mostrar de momento.</div>`;
-    return;
-  }
+  if (!vehicles.length){ document.getElementById("content").innerHTML = `<div class="empty">Sem viaturas a mostrar de momento.</div>`; return; }
   renderSkeletons(vehicles);
 
-  // Passo 2: gera as imagens (o servidor ja as faz em paralelo) -- timeout
-  // generoso porque isto envolve descarregar fotos + renderizar cada post,
-  // mas com um limite claro em vez de esperar para sempre.
   let imgRes;
-  try{
-    imgRes = await fetchWithTimeout(`/preview-imagens/${clientId}?criteria=${criteriaParam}&limit=${LIMIT}`, 60000);
-  }catch(e){
-    vehicles.forEach(markFailed);
-    return;
-  }
-  if (!imgRes.ok){
-    vehicles.forEach(markFailed);
-    return;
-  }
+  try{ imgRes = await fetchWithTimeout(`/preview-imagens/${clientId}?criteria=${criteriaParam}&limit=${LIMIT}&registar=true`, 60000); }
+  catch(e){ vehicles.forEach(markFailed); return; }
+  if (!imgRes.ok){ vehicles.forEach(markFailed); return; }
+
   const imgData = await imgRes.json();
   (imgData.resultados || []).forEach(r => {
-    if (r.image_url) fillImage(r.vehicle, r.image_url);
-    else markFailed(r.vehicle);
+    if (r.image_url) fillImage(r.vehicle, r.image_url); else markFailed(r.vehicle);
   });
 }
 
-load();
+// ---------------- histórico ----------------
+document.querySelectorAll(".period-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".period-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    loadHistorico(Number(btn.dataset.days));
+  });
+});
+
+async function loadHistorico(days){
+  const box = document.getElementById("log-content");
+  box.innerHTML = `<div class="status"><span class="dot"></span>A carregar histórico…</div>`;
+  let url = `/post-log/${clientId}?limit=100`;
+  if (days > 0){
+    const desde = new Date(Date.now() - days * 86400000).toISOString();
+    url += `&desde=${encodeURIComponent(desde)}`;
+  }
+  const data = await safeJson(url);
+  const entradas = (data && data.entradas) || [];
+  if (!entradas.length){
+    box.innerHTML = `<div class="empty">Sem publicações registadas neste período.</div>`;
+    return;
+  }
+  box.innerHTML = entradas.map(e => `
+    <div class="log-row">
+      <img src="/post-log/${clientId}/${e.id}/imagem" alt="${e.modelo || ''}">
+      <div class="info">
+        <div class="model">${e.modelo || "—"}</div>
+        <div class="meta">${new Date(e.criado_em).toLocaleString("pt-PT")} ${e.fonte === "preview" ? "· pré-visualização" : ""}</div>
+      </div>
+      <div class="price">${e.preco || ""}</div>
+    </div>
+  `).join("");
+}
+
+// ---------------- formulário Personalizar ----------------
+function initFormChips(){
+  const fuelsBox = document.getElementById("fuels-chips");
+  if (fuelsBox.childElementCount) return;
+  FUELS.forEach(f => fuelsBox.insertAdjacentHTML("beforeend", `<label class="chip"><input type="checkbox" value="${f}" class="fuel-chk"><span>${f}</span></label>`));
+  const daysBox = document.getElementById("days-chips");
+  DAYS.forEach(([label,val]) => daysBox.insertAdjacentHTML("beforeend", `<label class="chip"><input type="checkbox" value="${val}" class="day-chk"><span>${label}</span></label>`));
+}
+
+function applyCriteriaToForm(c){
+  document.getElementById("brands_include").value = (c.brands_include||[]).join(", ");
+  document.getElementById("brands_exclude").value = (c.brands_exclude||[]).join(", ");
+  document.getElementById("price_min").value = c.price_min ?? "";
+  document.getElementById("price_max").value = c.price_max ?? "";
+  document.getElementById("min_discount_pct").value = c.min_discount_pct ?? "";
+  document.getElementById("max_posts_per_week").value = c.max_posts_per_week ?? "";
+  document.getElementById("only_with_campaign").checked = !!c.only_with_campaign;
+  document.querySelectorAll(".fuel-chk").forEach(el => el.checked = (c.fuels||[]).includes(el.value));
+  document.querySelectorAll(".day-chk").forEach(el => el.checked = (c.skip_weekdays||[]).includes(Number(el.value)));
+}
+
+function collectCriteriaFromForm(){
+  const parseList = (id) => document.getElementById(id).value.split(",").map(s=>s.trim()).filter(Boolean);
+  const num = (id) => { const v = document.getElementById(id).value; return v === "" ? null : Number(v); };
+  return {
+    brands_include: parseList("brands_include"),
+    brands_exclude: parseList("brands_exclude"),
+    price_min: num("price_min"),
+    price_max: num("price_max"),
+    min_discount_pct: num("min_discount_pct"),
+    max_posts_per_week: num("max_posts_per_week"),
+    only_with_campaign: document.getElementById("only_with_campaign").checked,
+    fuels: [...document.querySelectorAll(".fuel-chk:checked")].map(el=>el.value),
+    skip_weekdays: [...document.querySelectorAll(".day-chk:checked")].map(el=>Number(el.value)),
+  };
+}
+
+document.getElementById("btn-save").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-save");
+  const statusEl = document.getElementById("form-status");
+  statusEl.className = "form-status";
+  btn.disabled = true;
+  try{
+    const criteria = collectCriteriaFromForm();
+    const res = await fetch(`/demo/${clientId}/criterios`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json", "X-Demo-Token": getToken()},
+      body: JSON.stringify(criteria),
+    });
+    if (res.status === 401){
+      clearToken();
+      throw new Error("A tua sessão expirou -- recarrega a página e introduz a password outra vez.");
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Erro ao guardar.");
+    statusEl.textContent = "Critérios guardados. A atualizar a vista \"Acompanhar\"…";
+    statusEl.className = "form-status show ok";
+    load();
+  }catch(e){
+    statusEl.textContent = e.message;
+    statusEl.className = "form-status show err";
+  }finally{
+    btn.disabled = false;
+  }
+});
 </script>
 </body>
 </html>
