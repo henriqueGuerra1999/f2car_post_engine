@@ -456,6 +456,22 @@ def guardar_criterios_cliente(client_id: str, request: Request, criteria: dict =
     return guardar_criterios(client_id, criteria)
 
 
+@app.post("/demo/{client_id}/template")
+def guardar_template_cliente(client_id: str, request: Request, config: dict = Body(...)):
+    """Mesma logica de POST /template/<client_id>, mas para a vista
+    'Personalizar' da demo publica -- exige uma sessao valida (password)."""
+    _require_client_token(client_id, request)
+    return guardar_template(client_id, config)
+
+
+@app.delete("/demo/{client_id}/template")
+def repor_template_cliente(client_id: str, request: Request):
+    """Mesma logica de DELETE /template/<client_id>, mas para a demo publica
+    -- exige uma sessao valida (password)."""
+    _require_client_token(client_id, request)
+    return repor_template(client_id)
+
+
 def _fetch_filtered_vehicles(client_id: str, criteria_json: str):
     client = CLIENTS.get(client_id)
     if not client:
@@ -644,7 +660,7 @@ def repor_template(client_id: str):
 def listar_log(client_id: str, desde: str | None = None, ate: str | None = None, fonte: str | None = None, limit: int = 200):
     conn = _db_conn()
     try:
-        query = "SELECT id, vehicle_model, price, old_price, source, created_at FROM post_log WHERE client_id = %s"
+        query = "SELECT id, vehicle_model, price, old_price, source, created_at, criteria_snapshot FROM post_log WHERE client_id = %s"
         params = [client_id]
         if desde:
             query += " AND created_at >= %s"
@@ -672,6 +688,7 @@ def listar_log(client_id: str, desde: str | None = None, ate: str | None = None,
                 "preco_antes": r[3],
                 "fonte": r[4],
                 "criado_em": r[5].isoformat(),
+                "criterios": r[6],
             }
             for r in rows
         ],
