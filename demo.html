@@ -74,6 +74,13 @@
   .period-btn{ background:var(--bg-alt); border:1px solid var(--divider); color:var(--muted); font-size:12px; font-weight:600; padding:7px 14px; border-radius:20px; cursor:pointer; }
   .period-btn.active{ background:#3a1c10; border-color:var(--orange); color:var(--orange-2); }
 
+  .datenav{ display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:18px; }
+  .datenav button{ width:34px; height:34px; border-radius:50%; border:1px solid var(--divider); background:var(--bg-alt); color:var(--white-soft); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .datenav button:disabled{ opacity:0.3; cursor:default; }
+  .datenav button:not(:disabled):hover{ border-color:var(--orange); color:var(--orange-2); }
+  .datenav .date-label{ font-family:'Space Grotesk',sans-serif; font-size:15px; font-weight:600; color:var(--white-soft); min-width:220px; text-align:center; }
+  .datenav .date-label .tag{ display:block; font-family:'Inter'; font-size:11px; font-weight:600; color:var(--orange-2); text-transform:uppercase; letter-spacing:1px; margin-top:2px; }
+
   .log-row{ display:flex; align-items:center; gap:14px; padding:10px 0; border-bottom:1px solid var(--divider); }
   .log-row:last-child{ border-bottom:none; }
   .log-row img{ width:44px; height:55px; object-fit:cover; border-radius:4px; background:var(--bg-alt); flex-shrink:0; }
@@ -143,23 +150,18 @@
 
     <div class="tab-panel active" id="tab-acompanhar">
       <div class="card">
-        <h2>Critérios em uso hoje</h2>
+        <div class="datenav">
+          <button id="date-prev" title="Dia anterior">&larr;</button>
+          <div class="date-label" id="date-label">A carregar…</div>
+          <button id="date-next" title="Dia seguinte">&rarr;</button>
+        </div>
+        <h2 style="margin-bottom:10px;">Critérios aplicados</h2>
         <div class="criteria-line" id="criteria-line">A carregar…</div>
       </div>
 
       <div class="card">
-        <h2 style="margin-bottom:16px;">Viaturas selecionadas</h2>
+        <h2 style="margin-bottom:16px;" id="posts-title">Viaturas selecionadas</h2>
         <div id="content"><div class="status"><span class="dot"></span>A ligar ao inventário…</div></div>
-      </div>
-
-      <div class="card">
-        <h2>Histórico</h2>
-        <div class="period-row">
-          <button class="period-btn active" data-days="7">7 dias</button>
-          <button class="period-btn" data-days="30">30 dias</button>
-          <button class="period-btn" data-days="0">Tudo</button>
-        </div>
-        <div id="log-content"><div class="status"><span class="dot"></span>A carregar histórico…</div></div>
       </div>
     </div>
 
@@ -218,6 +220,23 @@
           <button class="btn btn-primary" id="btn-save">Guardar alterações</button>
         </div>
         <div class="form-status" id="form-status"></div>
+      </div>
+
+      <div class="card">
+        <h2>Template do post</h2>
+        <p style="font-size:12.5px; color:var(--muted); margin:-8px 0 20px; line-height:1.6;">
+          Se precisares de aplicar um template diferente (cores, layout ou textos fixos), carrega aqui o ficheiro <code>template_config.json</code> combinado com a Fenrion AI.
+        </p>
+        <div class="field">
+          <label>Ficheiro do template (.json)</label>
+          <input type="file" id="template_file" accept="application/json,.json">
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" id="btn-upload-template">Carregar novo template</button>
+          <button class="btn" id="btn-reset-template" style="background:var(--bg-alt); border:1px solid var(--divider); color:var(--body);">Repor template padrão</button>
+        </div>
+        <div class="form-status" id="template-status"></div>
+        <div class="lede" id="template-meta" style="margin:12px 0 0; font-size:12px;">A carregar…</div>
       </div>
     </div>
 
@@ -284,8 +303,9 @@ function mostrarConteudo(){
   document.getElementById("gate").style.display = "none";
   document.getElementById("main").style.display = "block";
   initFormChips();
-  load();
-  loadHistorico(7);
+  updateDateNav();
+  loadForSelectedDate();
+  loadTemplateMeta();
 }
 
 // se ja houver um token guardado, tenta usa-lo diretamente (sem pedir password outra vez)
@@ -389,39 +409,70 @@ async function load(){
   });
 }
 
-// ---------------- histórico ----------------
-document.querySelectorAll(".period-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".period-btn").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    loadHistorico(Number(btn.dataset.days));
-  });
+// ---------------- navegação por dia (carrossel de datas) ----------------
+let selectedDate = startOfDay(new Date());
+
+function startOfDay(d){ const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+function isToday(d){ return startOfDay(d).getTime() === startOfDay(new Date()).getTime(); }
+
+function fmtDateLabel(d){
+  const opts = { weekday: "long", day: "numeric", month: "long" };
+  let s = d.toLocaleDateString("pt-PT", opts);
+  s = s.charAt(0).toUpperCase() + s.slice(1);
+  return `${s}${isToday(d) ? '<span class="tag">Hoje</span>' : ""}`;
+}
+
+function updateDateNav(){
+  document.getElementById("date-label").innerHTML = fmtDateLabel(selectedDate);
+  document.getElementById("date-next").disabled = isToday(selectedDate);
+}
+
+document.getElementById("date-prev").addEventListener("click", () => {
+  selectedDate = new Date(selectedDate.getTime() - 86400000);
+  updateDateNav();
+  loadForSelectedDate();
+});
+document.getElementById("date-next").addEventListener("click", () => {
+  if (isToday(selectedDate)) return;
+  selectedDate = new Date(selectedDate.getTime() + 86400000);
+  updateDateNav();
+  loadForSelectedDate();
 });
 
-async function loadHistorico(days){
-  const box = document.getElementById("log-content");
-  box.innerHTML = `<div class="status"><span class="dot"></span>A carregar histórico…</div>`;
-  let url = `/post-log/${clientId}?limit=100`;
-  if (days > 0){
-    const desde = new Date(Date.now() - days * 86400000).toISOString();
-    url += `&desde=${encodeURIComponent(desde)}`;
+async function loadForSelectedDate(){
+  if (isToday(selectedDate)){
+    document.getElementById("posts-title").textContent = "Viaturas selecionadas hoje";
+    await load();
+  } else {
+    document.getElementById("posts-title").textContent = "Publicações desse dia";
+    await loadPastDay(selectedDate);
   }
-  const data = await safeJson(url);
+}
+
+async function loadPastDay(date){
+  document.getElementById("criteria-line").textContent = "A carregar…";
+  document.getElementById("content").innerHTML = `<div class="status"><span class="dot"></span>A carregar publicações…</div>`;
+
+  const desde = startOfDay(date).toISOString();
+  const ate = new Date(startOfDay(date).getTime() + 86400000 - 1).toISOString();
+  const data = await safeJson(`/post-log/${clientId}?desde=${encodeURIComponent(desde)}&ate=${encodeURIComponent(ate)}&limit=100`);
   const entradas = (data && data.entradas) || [];
+
   if (!entradas.length){
-    box.innerHTML = `<div class="empty">Sem publicações registadas neste período.</div>`;
+    document.getElementById("criteria-line").innerHTML = `<span class="empty" style="padding:0;">Sem registo de critérios para este dia.</span>`;
+    document.getElementById("content").innerHTML = `<div class="empty">Sem publicações registadas neste dia.</div>`;
     return;
   }
-  box.innerHTML = entradas.map(e => `
-    <div class="log-row">
-      <img src="/post-log/${clientId}/${e.id}/imagem" alt="${e.modelo || ''}">
-      <div class="info">
-        <div class="model">${e.modelo || "—"}</div>
-        <div class="meta">${new Date(e.criado_em).toLocaleString("pt-PT")} ${e.fonte === "preview" ? "· pré-visualização" : ""}</div>
+
+  const comCriterios = entradas.find(e => e.criterios);
+  document.getElementById("criteria-line").innerHTML = describeCriteria((comCriterios && comCriterios.criterios) || {});
+
+  document.getElementById("content").innerHTML = `<div class="vgrid">` +
+    entradas.map(e => `
+      <div class="vcard">
+        <img src="/post-log/${clientId}/${e.id}/imagem" alt="${e.modelo || ''}">
       </div>
-      <div class="price">${e.preco || ""}</div>
-    </div>
-  `).join("");
+    `).join("") + `</div>`;
 }
 
 // ---------------- formulário Personalizar ----------------
@@ -485,6 +536,79 @@ document.getElementById("btn-save").addEventListener("click", async () => {
   }catch(e){
     statusEl.textContent = e.message;
     statusEl.className = "form-status show err";
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+// ---------------- template do post ----------------
+function showTemplateStatus(msg, type){
+  const el = document.getElementById("template-status");
+  el.textContent = msg;
+  el.className = `form-status show ${type}`;
+}
+
+async function loadTemplateMeta(){
+  const metaEl = document.getElementById("template-meta");
+  const data = await safeJson(`/template/${clientId}`);
+  if (data && data.updated_at){
+    metaEl.textContent = `Template personalizado em uso, guardado em ${new Date(data.updated_at).toLocaleString("pt-PT")}.`;
+  } else {
+    metaEl.textContent = "A usar o template padrão da Fenrion AI (nenhum personalizado guardado).";
+  }
+}
+
+document.getElementById("btn-upload-template").addEventListener("click", async () => {
+  const fileInput = document.getElementById("template_file");
+  const file = fileInput.files[0];
+  if (!file){ showTemplateStatus("Escolhe primeiro um ficheiro .json.", "err"); return; }
+  const btn = document.getElementById("btn-upload-template");
+  btn.disabled = true;
+  try{
+    const text = await file.text();
+    let config;
+    try{ config = JSON.parse(text); }
+    catch(e){ throw new Error("Ficheiro invalido -- confirma que e um JSON valido."); }
+
+    const res = await fetch(`/demo/${clientId}/template`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json", "X-Demo-Token": getToken()},
+      body: JSON.stringify(config),
+    });
+    if (res.status === 401){
+      clearToken();
+      throw new Error("A tua sessão expirou -- recarrega a página e introduz a password outra vez.");
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Erro ao guardar o template.");
+    showTemplateStatus("Template guardado e validado.", "ok");
+    fileInput.value = "";
+    await loadTemplateMeta();
+  }catch(e){
+    showTemplateStatus(e.message, "err");
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("btn-reset-template").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-reset-template");
+  btn.disabled = true;
+  try{
+    const res = await fetch(`/demo/${clientId}/template`, {
+      method: "DELETE",
+      headers: {"X-Demo-Token": getToken()},
+    });
+    if (res.status === 401){
+      clearToken();
+      throw new Error("A tua sessão expirou -- recarrega a página e introduz a password outra vez.");
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Erro ao repor o template.");
+    showTemplateStatus("Reposto o template padrão da Fenrion AI.", "ok");
+    await loadTemplateMeta();
+  }catch(e){
+    showTemplateStatus(e.message, "err");
   }finally{
     btn.disabled = false;
   }
