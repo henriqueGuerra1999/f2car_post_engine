@@ -389,8 +389,8 @@ async function load(){
   const criteriaParam = encodeURIComponent(JSON.stringify(criteria));
 
   let vehiclesRes;
-  try{ vehiclesRes = await fetchWithTimeout(`/viaturas/${clientId}?criteria=${criteriaParam}`, 20000); }
-  catch(e){ showRetry("Não foi possível ligar ao inventário. Verifica a ligação e tenta outra vez."); return; }
+  try{ vehiclesRes = await fetchWithTimeout(`/viaturas/${clientId}?criteria=${criteriaParam}`, 50000); }
+  catch(e){ showRetry("O serviço pode estar a acordar depois de um período sem uso -- isto pode demorar até um minuto na primeira vez. Tenta outra vez."); return; }
   if (!vehiclesRes.ok){ showRetry("Não foi possível carregar o inventário de momento."); return; }
 
   const vehiclesData = await vehiclesRes.json();
@@ -399,7 +399,7 @@ async function load(){
   renderSkeletons(vehicles);
 
   let imgRes;
-  try{ imgRes = await fetchWithTimeout(`/preview-imagens/${clientId}?criteria=${criteriaParam}&limit=${LIMIT}&registar=true`, 60000); }
+  try{ imgRes = await fetchWithTimeout(`/preview-imagens/${clientId}?criteria=${criteriaParam}&limit=${LIMIT}&registar=true`, 90000); }
   catch(e){ vehicles.forEach(markFailed); return; }
   if (!imgRes.ok){ vehicles.forEach(markFailed); return; }
 
