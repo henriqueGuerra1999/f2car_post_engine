@@ -266,9 +266,9 @@ function fetchWithTimeout(url, ms, opts){
   return fetch(url, { ...(opts||{}), signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
-async function safeJson(url){
+async function safeJson(url, ms = 25000){
   try{
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url, ms);
     if (!res.ok) return null;
     return await res.json();
   }catch(e){ return null; }
