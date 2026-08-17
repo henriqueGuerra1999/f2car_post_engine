@@ -709,12 +709,15 @@ def imagem_log(client_id: str, log_id: int):
     return Response(content=bytes(row[0]), media_type="image/png")
 
 
+_NO_CACHE_HEADERS = {"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"}
+
+
 @app.get("/painel", response_class=FileResponse)
 def painel():
     path = os.path.join(HERE, "painel.html")
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="painel.html nao encontrado no servico.")
-    return FileResponse(path, media_type="text/html")
+    return FileResponse(path, media_type="text/html", headers=_NO_CACHE_HEADERS)
 
 
 @app.get("/demo/{client_id}", response_class=FileResponse)
@@ -723,7 +726,9 @@ def demo(client_id: str):
     # sem nenhum controlo de filtro visivel. O client_id na URL identifica
     # o cliente (ex: /demo/f2car); o proprio demo.html le-o do path e usa
     # os criterios ja guardados em /criterios/<client_id> (se existirem).
+    # Cache-Control: no-store para garantir que o browser nunca fica preso
+    # numa versao antiga da pagina depois de um deploy (aconteceu uma vez).
     path = os.path.join(HERE, "demo.html")
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="demo.html nao encontrado no servico.")
-    return FileResponse(path, media_type="text/html")
+    return FileResponse(path, media_type="text/html", headers=_NO_CACHE_HEADERS)
